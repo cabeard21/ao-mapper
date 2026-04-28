@@ -1,0 +1,25 @@
+This app aims to accomplish the following:
+
+Be a tool that makes mapping connections in the game of Albion Online as easy as possible to create and manage.
+
+- Provide the user with a web based GUI
+- Provide the user with the ability to add/delete/update "nodes" on a graph style map
+- Provide the user with information about each node populated from game data:
+    - Zone tier
+    - Zone resources/camps
+    - Zone description (hideout/royal/black/red/yellow/blue)
+    - Distance to major city (uses route optimization described below)
+- Provide the user with a hotkey that when hit will find any tooltip information describing a portal connection.
+    - This may require an additional service that runs locally.
+- Automatically detect any useful information using a packet sniffer (see refs\sniffer) to obtain zone names\player location automatically where helpful
+- Provide the user with a route optimizer to any zone from any selected zone (including the user's "Home" or current location). See https://albionfreemarket.com/albion-map for a description of the desired functionality.
+    - Ideally this can use map/connection data from refs\ao-bin-dumps to help determine fastest routing
+    - Should also consider avalonian road routes mapped by the user
+- Persist portal connections based on each portal's tooltip based duration
+    - Ideally read via OCR or template matching (see hotkey functionality mentioned above)
+
+There are a couple of reference repo's that could be helpful in the `refs` folder:
+- ao-bin-dumps: contains the game's actual data files from its binaries
+- avalon-raods: a repo that contains categorical information about all of the different avalonian road zones
+- portaler-modern: a repo that contains the code for running a web based, graph style GUI for road portal mapping
+- sniffer: a repo that contains some sniffer code, not sure if it's useful

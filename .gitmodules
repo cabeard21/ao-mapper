@@ -1,0 +1,12 @@
+[submodule "refs/portaler-modern"]
+	path = refs/portaler-modern
+	url = https://github.com/nicti/portaler-modern.git
+[submodule "refs/avalon-roads"]
+	path = refs/avalon-roads
+	url = https://github.com/AO-Noki/avalon-roads.git
+[submodule "refs/ao-bin-dumps"]
+	path = refs/ao-bin-dumps
+	url = https://github.com/ao-data/ao-bin-dumps.git
+[submodule "refs/sniffer"]
+	path = refs/sniffer
+	url = https://github.com/AO-Noki/sniffer.git

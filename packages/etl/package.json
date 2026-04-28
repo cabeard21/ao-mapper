@@ -1,0 +1,24 @@
+{
+  "name": "@ao-mapper/etl",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "import": "ts-node src/index.ts",
+    "build": "tsc --project tsconfig.json",
+    "type-check": "tsc --noEmit",
+    "lint": "echo 'no linter configured for etl'",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ao-mapper/shared": "workspace:*",
+    "dotenv": "^16.4.5",
+    "pg": "^8.11.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "@types/pg": "^8.11.6",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}
