@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS node_positions (
+  zone_id UUID  NOT NULL REFERENCES zones(id) ON DELETE CASCADE,
+  x       REAL  NOT NULL DEFAULT 0,
+  y       REAL  NOT NULL DEFAULT 0,
+  PRIMARY KEY (zone_id)
+);

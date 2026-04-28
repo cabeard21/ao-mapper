@@ -23,6 +23,9 @@ importers:
       express:
         specifier: ^4.19.2
         version: 4.22.1
+      pg:
+        specifier: ^8.11.5
+        version: 8.20.0
     devDependencies:
       '@types/express':
         specifier: ^4.17.21
@@ -30,6 +33,9 @@ importers:
       '@types/node':
         specifier: ^20.12.12
         version: 20.19.39
+      '@types/pg':
+        specifier: ^8.11.6
+        version: 8.20.0
       ts-node-dev:
         specifier: ^2.0.0
         version: 2.0.0(@types/node@20.19.39)(typescript@5.9.3)
