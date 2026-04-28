@@ -42,7 +42,7 @@ export async function migrate(pool: Pool): Promise<void> {
         console.log(`  ✓ ${file}`);
       } catch (err) {
         await client.query("ROLLBACK");
-        throw new Error(`Migration ${file} failed: ${(err as Error).message}`);
+        throw new Error(`Migration ${file} failed`, { cause: err });
       }
     }
   } finally {

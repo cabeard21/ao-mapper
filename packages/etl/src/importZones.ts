@@ -2,9 +2,9 @@ import { readFileSync } from 'fs'
 import { Pool } from 'pg'
 import type { Resource, ZoneType } from '@ao-mapper/shared'
 
-const WORLD_JSON_PATH =
+const DEFAULT_WORLD_JSON_PATH =
   'C:\\Users\\xadministrator\\Documents\\Repo\\ao-mapper\\refs\\ao-bin-dumps\\formatted\\world.json'
-const MAPS_JSON_PATH =
+const DEFAULT_MAPS_JSON_PATH =
   'C:\\Users\\xadministrator\\Documents\\Repo\\ao-mapper\\refs\\avalon-roads\\src\\data\\maps.json'
 
 const BATCH_SIZE = 100
@@ -42,6 +42,11 @@ interface ZoneRecord {
   resources: Resource[]
   cityDistance: unknown[]
   metadata: Record<string, unknown>
+}
+
+interface ImportZonePaths {
+  worldJsonPath: string
+  mapsJsonPath: string
 }
 
 function classifyZoneType(uniqueName: string): ZoneType {
@@ -171,9 +176,15 @@ function readJsonFile<T>(path: string): T {
   return JSON.parse(raw) as T
 }
 
-export async function importZones(pool: Pool): Promise<number> {
-  const world = readJsonFile<WorldEntry[]>(WORLD_JSON_PATH)
-  const mapsJson = readJsonFile<MapsJson>(MAPS_JSON_PATH)
+export async function importZones(
+  pool: Pool,
+  paths: ImportZonePaths = {
+    worldJsonPath: DEFAULT_WORLD_JSON_PATH,
+    mapsJsonPath: DEFAULT_MAPS_JSON_PATH,
+  }
+): Promise<number> {
+  const world = readJsonFile<WorldEntry[]>(paths.worldJsonPath)
+  const mapsJson = readJsonFile<MapsJson>(paths.mapsJsonPath)
   const mapsIndex = buildMapsIndex(mapsJson.maps)
 
   const filtered = world.filter((entry) => !shouldSkipEntry(entry.Index))
