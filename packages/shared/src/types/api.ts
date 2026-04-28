@@ -11,3 +11,8 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
     limit: number;
   };
 }
+
+export interface RouteResult {
+  path: string[] | null;
+  hops: number | null;
+}

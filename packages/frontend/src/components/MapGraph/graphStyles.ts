@@ -5,6 +5,9 @@ export const graphStyles: cytoscape.StylesheetStyle[] = [
     selector: "node",
     style: {
       "background-color": "#1a1a2e",
+      "background-image": "data(icon)",
+      "background-fit": "contain",
+      "background-opacity": 0.72,
       label: "data(label)",
       color: "#ffffff",
       "text-valign": "center",
@@ -54,6 +57,10 @@ export const graphStyles: cytoscape.StylesheetStyle[] = [
   {
     selector: "node.current-zone",
     style: { "border-color": "#00ff88", "border-width": 4 },
+  },
+  {
+    selector: "node.connection-source",
+    style: { "border-color": "#38bdf8", "border-width": 4 },
   },
   {
     selector: "node.dimmed",

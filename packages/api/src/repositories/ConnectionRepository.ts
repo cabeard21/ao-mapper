@@ -5,7 +5,7 @@ export interface CreateConnectionData {
   fromZoneId: string;
   toZoneId: string;
   connType: ConnectionType;
-  durationHours?: number;
+  durationHours?: number | null;
 }
 
 export interface UpdateConnectionData {
@@ -73,12 +73,17 @@ export class ConnectionRepository {
 
   async create(data: CreateConnectionData): Promise<Connection> {
     const { fromZoneId, toZoneId, connType, durationHours } = data;
-    const hours = durationHours ?? 1;
     const result = await this.pool.query<ConnectionRow>(
       `INSERT INTO connections (from_zone_id, to_zone_id, conn_type, duration_hours, expires_at)
-       VALUES ($1, $2, $3, $4, now() + ($5 * interval '1 hour'))
+       VALUES (
+         $1,
+         $2,
+         $3,
+         $4,
+         CASE WHEN $5::real IS NULL THEN NULL ELSE now() + ($5 * interval '1 hour') END
+       )
        RETURNING *`,
-      [fromZoneId, toZoneId, connType, durationHours ?? null, hours]
+      [fromZoneId, toZoneId, connType, durationHours ?? null, durationHours ?? null]
     );
     return mapRow(result.rows[0]);
   }
@@ -131,8 +136,12 @@ export class ConnectionRepository {
   }
 
   async markExpired(): Promise<string[]> {
-    // Expiry is enforced at query time via expires_at comparisons.
-    // No state change required here.
-    return [];
+    const result = await this.pool.query<{ id: string }>(
+      `SELECT id FROM connections
+       WHERE expires_at IS NOT NULL
+         AND expires_at < now()
+         AND expires_at > now() - interval '24 hours'`
+    );
+    return result.rows.map((row) => row.id);
   }
 }

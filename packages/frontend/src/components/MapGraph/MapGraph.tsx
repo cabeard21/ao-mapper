@@ -3,7 +3,11 @@ import fcose from "cytoscape-fcose";
 import { useEffect, useRef } from "react";
 import axios from "axios";
 import { useMapStore } from "../../store/mapStore";
+import { AddConnectionModal } from "../AddConnectionModal/AddConnectionModal";
+import { ConnectionToolbar } from "../ConnectionToolbar/ConnectionToolbar";
+import { EdgeContextMenu } from "../EdgeContextMenu/EdgeContextMenu";
 import { graphStyles } from "./graphStyles";
+import { getPrimaryZoneIcon } from "../zonePresentation";
 
 cytoscape.use(fcose);
 
@@ -50,7 +54,13 @@ export function MapGraph() {
   const selectedNodeId = useMapStore((s) => s.selectedNodeId);
   const currentZoneId = useMapStore((s) => s.currentZoneId);
   const routePath = useMapStore((s) => s.routePath);
+  const isConnectionDrawMode = useMapStore((s) => s.isConnectionDrawMode);
+  const pendingConnectionFromNodeId = useMapStore(
+    (s) => s.pendingConnectionFromNodeId
+  );
   const setSelectedNode = useMapStore((s) => s.setSelectedNode);
+  const openEdgeContextMenu = useMapStore((s) => s.openEdgeContextMenu);
+  const closeEdgeContextMenu = useMapStore((s) => s.closeEdgeContextMenu);
 
   // Initialize Cytoscape
   useEffect(() => {
@@ -83,11 +93,43 @@ export function MapGraph() {
       });
 
     cy.on("tap", "node", (evt) => {
-      setSelectedNode(evt.target.id());
+      const nodeId = evt.target.id();
+      closeEdgeContextMenu();
+
+      const state = useMapStore.getState();
+      if (state.isConnectionDrawMode) {
+        if (!state.pendingConnectionFromNodeId) {
+          state.setPendingConnectionFrom(nodeId);
+          return;
+        }
+
+        if (state.pendingConnectionFromNodeId !== nodeId) {
+          state.openConnectionModal({
+            fromNodeId: state.pendingConnectionFromNodeId,
+            toNodeId: nodeId,
+          });
+          return;
+        }
+      }
+
+      setSelectedNode(nodeId);
     });
 
     cy.on("tap", (evt) => {
-      if (evt.target === cy) setSelectedNode(null);
+      if (evt.target === cy) {
+        closeEdgeContextMenu();
+        setSelectedNode(null);
+      }
+    });
+
+    cy.on("cxttap", "edge", (evt) => {
+      evt.preventDefault();
+      const rendered = evt.renderedPosition;
+      openEdgeContextMenu({
+        edgeId: evt.target.id(),
+        x: rendered.x,
+        y: rendered.y,
+      });
     });
 
     cy.on("dragfree", "node", (evt) => {
@@ -104,7 +146,7 @@ export function MapGraph() {
       cy.destroy();
       cyRef.current = null;
     };
-  }, [setSelectedNode]);
+  }, [closeEdgeContextMenu, openEdgeContextMenu, setSelectedNode]);
 
   // Sync nodes
   useEffect(() => {
@@ -128,9 +170,13 @@ export function MapGraph() {
             label: n.label,
             zoneType: n.zoneType,
             tier: n.tier,
+            icon: getPrimaryZoneIcon(n.zone),
           },
           position: saved ? { x: saved.x, y: saved.y } : undefined,
         });
+        if (!saved) {
+          cy.layout(defaultSettings.layout as cytoscape.LayoutOptions).run();
+        }
       }
     });
   }, [nodes]);
@@ -162,6 +208,18 @@ export function MapGraph() {
           });
           if (e.durationHours) elem.addClass("timed");
         }
+      } else {
+        const elem = cy.$id(e.id);
+        elem.data({
+          ...elem.data(),
+          connType: e.connType,
+          label: e.label,
+        });
+        elem.toggleClass("timed", Boolean(e.durationHours));
+        elem.toggleClass(
+          "time-low",
+          Boolean(e.expiresAt && new Date(e.expiresAt).getTime() - Date.now() < 60 * 60_000)
+        );
       }
     });
   }, [edges]);
@@ -173,6 +231,16 @@ export function MapGraph() {
     cy.nodes().removeClass("selected");
     if (selectedNodeId) cy.$id(selectedNodeId).addClass("selected");
   }, [selectedNodeId]);
+
+  // Draw-mode source highlight
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.nodes().removeClass("connection-source");
+    if (isConnectionDrawMode && pendingConnectionFromNodeId) {
+      cy.$id(pendingConnectionFromNodeId).addClass("connection-source");
+    }
+  }, [isConnectionDrawMode, pendingConnectionFromNodeId]);
 
   // Current zone highlight
   useEffect(() => {
@@ -198,8 +266,16 @@ export function MapGraph() {
 
   return (
     <div
-      ref={containerRef}
-      style={{ width: "100%", height: "100%", background: "#0d0d1a" }}
-    />
+      style={{ position: "relative", width: "100%", height: "100%" }}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      <div
+        ref={containerRef}
+        style={{ width: "100%", height: "100%", background: "#0d0d1a" }}
+      />
+      <ConnectionToolbar />
+      <EdgeContextMenu />
+      <AddConnectionModal />
+    </div>
   );
 }

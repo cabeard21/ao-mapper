@@ -73,6 +73,25 @@ describe("ConnectionRepository", () => {
     expect(created.fromZoneId).toBe("zone-a");
   });
 
+  it("create without durationHours stores a permanent connection", async () => {
+    const { pool, query } = makeMockPool([
+      makeRow({ duration_hours: null, expires_at: null }),
+    ]);
+    const repo = new ConnectionRepository(pool);
+
+    const created = await repo.create({
+      fromZoneId: "zone-a",
+      toZoneId: "zone-b",
+      connType: "AVALON_ROAD",
+      durationHours: null,
+    });
+
+    const params = query.mock.calls[0][1] as unknown[];
+    expect(params).toEqual(["zone-a", "zone-b", "AVALON_ROAD", null, null]);
+    expect(created.durationHours).toBeNull();
+    expect(created.expiresAt).toBeNull();
+  });
+
   it("delete with empty result returns false", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [], rowCount: 0 });
     const pool = { query } as unknown as Pool;
@@ -104,9 +123,9 @@ describe("ConnectionRepository", () => {
     expect(result).toBeNull();
   });
 
-  it("markExpired returns empty array (DB-driven expiry)", async () => {
-    const { pool } = makeMockPool([]);
+  it("markExpired returns recently expired connection ids", async () => {
+    const { pool } = makeMockPool([{ id: "expired-1" }, { id: "expired-2" }]);
     const repo = new ConnectionRepository(pool);
-    expect(await repo.markExpired()).toEqual([]);
+    expect(await repo.markExpired()).toEqual(["expired-1", "expired-2"]);
   });
 });
