@@ -1,11 +1,21 @@
-import "dotenv/config";
+import 'dotenv/config'
+import { Pool } from 'pg'
+import { importZones } from './importZones'
 
-async function main() {
-  console.log("ETL — no import scripts registered yet");
-  console.log("Run: pnpm --filter etl import");
+async function main(): Promise<void> {
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL environment variable is required')
+  }
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+  try {
+    const count = await importZones(pool)
+    console.log(`Done. Imported ${count} zones.`)
+  } finally {
+    await pool.end()
+  }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main().catch((err: unknown) => {
+  console.error(err)
+  process.exit(1)
+})
