@@ -415,4 +415,85 @@ describe('importZones', () => {
       dungeons: [{ type: 'solo', size: 'small', count: 2 }],
     })
   })
+
+  it('uses UniqueName as displayName and derives roads type from cluster for TNL zones', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ao-mapper-etl-tnl-'))
+    const worldJsonPath = join(dir, 'world.json')
+    const mapsJsonPath = join(dir, 'maps.json')
+    const clusterDir = mkdtempSync(join(tmpdir(), 'ao-mapper-cluster-tnl-'))
+
+    writeFileSync(worldJsonPath, JSON.stringify([{ Index: 'TNL-001', UniqueName: 'Ouyos-Aoeuam' }]))
+    writeFileSync(mapsJsonPath, JSON.stringify({ maps: [] }))
+    writeFileSync(join(clusterDir, 'TNL-001_RDS_FR_RED_T4_AVA_AVA.cluster.xml'), '')
+
+    const { pool, query } = createPoolMock()
+    await importZones(pool as unknown as Pool, { worldJsonPath, mapsJsonPath, clusterDir })
+
+    const calls = insertCalls(query)
+    const tnl = calls.find(([, params]) => params[0] === 'Ouyos-Aoeuam')
+    expect(tnl).toBeDefined()
+    expect(tnl![1]).toEqual([
+      'Ouyos-Aoeuam',
+      'Ouyos-Aoeuam',
+      4,
+      'roads',
+      JSON.stringify([]),
+      JSON.stringify([]),
+      JSON.stringify({}),
+    ])
+  })
+
+  it('uses UniqueName as displayName and derives type from cluster for PSG zones', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ao-mapper-etl-psg-'))
+    const worldJsonPath = join(dir, 'world.json')
+    const mapsJsonPath = join(dir, 'maps.json')
+    const clusterDir = mkdtempSync(join(tmpdir(), 'ao-mapper-cluster-psg-'))
+
+    writeFileSync(worldJsonPath, JSON.stringify([{ Index: 'PSG-0001', UniqueName: 'Chasmlight Cave' }]))
+    writeFileSync(mapsJsonPath, JSON.stringify({ maps: [] }))
+    writeFileSync(join(clusterDir, 'PSG-0001_PGU_HL_AUTO_T5_NON_ROY.cluster.xml'), '')
+
+    const { pool, query } = createPoolMock()
+    await importZones(pool as unknown as Pool, { worldJsonPath, mapsJsonPath, clusterDir })
+
+    const calls = insertCalls(query)
+    const psg = calls.find(([, params]) => params[0] === 'Chasmlight Cave')
+    expect(psg).toBeDefined()
+    expect(psg![1]).toEqual([
+      'Chasmlight Cave',
+      'Chasmlight Cave',
+      5,
+      'yellow',
+      JSON.stringify([]),
+      JSON.stringify([]),
+      JSON.stringify({}),
+    ])
+  })
+
+  it('strips # variant suffix to resolve cluster data for PSG zones with multiple instances', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ao-mapper-etl-psg-hash-'))
+    const worldJsonPath = join(dir, 'world.json')
+    const mapsJsonPath = join(dir, 'maps.json')
+    const clusterDir = mkdtempSync(join(tmpdir(), 'ao-mapper-cluster-psg-hash-'))
+
+    writeFileSync(worldJsonPath, JSON.stringify([{ Index: 'PSG-0039#2', UniqueName: 'Darkseep Core' }]))
+    writeFileSync(mapsJsonPath, JSON.stringify({ maps: [] }))
+    writeFileSync(join(clusterDir, 'PSG-0039_PGU_MN_AUTO_T5_NON_OUT_Q2.cluster.xml'), '')
+
+    const { pool, query } = createPoolMock()
+    await importZones(pool as unknown as Pool, { worldJsonPath, mapsJsonPath, clusterDir })
+
+    const calls = insertCalls(query)
+    const psg = calls.find(([, params]) => params[0] === 'Darkseep Core')
+    expect(psg).toBeDefined()
+    expect(psg![1]).toEqual([
+      'Darkseep Core',
+      'Darkseep Core',
+      5,
+      'black',
+      JSON.stringify([]),
+      JSON.stringify([]),
+      JSON.stringify({}),
+    ])
+  })
 })
