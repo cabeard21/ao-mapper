@@ -121,6 +121,7 @@ function clusterPvpTypeToZoneType(pvpType: string, tier: number): ZoneType {
   if (pvpType === 'NON') return 'royal'
   if (pvpType === 'OUT') return 'black'
   if (pvpType === 'MIS') return 'roads'
+  if (pvpType === 'AVA') return 'roads'
   if (pvpType === 'ROY') {
     if (tier <= 4) return 'blue'
     if (tier <= 6) return 'yellow'
@@ -136,7 +137,7 @@ function buildClusterIndex(clusterDir: string): Map<string, ClusterInfo> {
   for (const file of files) {
     const parts = file.replace('.cluster.xml', '').split('_')
     const zoneIndex = parts[0]
-    if (!/^\d+$/.test(zoneIndex)) continue
+    if (!/^\d+$/.test(zoneIndex) && !/^[A-Z]+-\d+$/.test(zoneIndex)) continue
 
     const tierPart = parts.find((p) => /^T\d$/.test(p))
     if (!tierPart) continue
@@ -470,21 +471,25 @@ function buildZoneRecord(
   mapsIndex: Map<string, MapEntry>,
   clusterIndex: Map<string, ClusterInfo>
 ): ZoneRecord {
-  // Numeric Index means the display name is in UniqueName (e.g. Index="4206", UniqueName="Tharcal Fissure").
-  // Text Index means Index itself is the display name (e.g. Index="Deepwood Dell", UniqueName="OPEN_WORLD_T5_...").
+  // Numeric Index (e.g. "4206") and coded Index (e.g. "TNL-001", "PSG-0039#2") both store
+  // the human-readable display name in UniqueName. Text Index (e.g. "Deepwood Dell") is itself the display name.
   const isNumeric = /^\d+$/.test(entry.Index)
-  const displayName = isNumeric ? entry.UniqueName : entry.Index
+  const isCoded = /^[A-Z]+-\d+/.test(entry.Index)
+  const isIndexedEntry = isNumeric || isCoded
+  const displayName = isIndexedEntry ? entry.UniqueName : entry.Index
 
-  let tier = isNumeric ? 0 : extractTier(entry.UniqueName)
+  let tier = isIndexedEntry ? 0 : extractTier(entry.UniqueName)
 
   const normalized = normalizeName(displayName)
   const mapMatch = mapsIndex.get(normalized)
-  const clusterData = isNumeric ? clusterIndex.get(entry.Index) : undefined
+  // Coded indexes may have a #N variant suffix (e.g. "PSG-0039#2"); strip it to match the cluster filename base.
+  const clusterKey = isCoded ? entry.Index.split('#')[0] : entry.Index
+  const clusterData = isIndexedEntry ? clusterIndex.get(clusterKey) : undefined
 
   if (tier === 0 && mapMatch) tier = mapMatch.tier
   if (tier === 0 && clusterData) tier = clusterData.tier
 
-  const zoneType: ZoneType = isNumeric
+  const zoneType: ZoneType = isIndexedEntry
     ? (clusterData?.zoneType ?? classifyZoneType(entry.UniqueName))
     : classifyZoneType(entry.UniqueName)
 
