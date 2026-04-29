@@ -1,4 +1,6 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+import path from "path";
+dotenv.config({ path: path.resolve("../../.env") });
 import { createServer } from "http";
 import express from "express";
 import { pool, migrate } from "./db";

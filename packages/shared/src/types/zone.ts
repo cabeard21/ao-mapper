@@ -15,6 +15,7 @@ export interface Resource {
 export interface CityDistance {
   cityName: string;
   hops: number;
+  meters?: number;
 }
 
 export interface Zone {

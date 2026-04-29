@@ -42,6 +42,22 @@ describe("ZoneRepository", () => {
       expect(result[0].createdAt).toBe("2025-01-01T00:00:00.000Z");
     });
 
+    it("preserves city distance meters from JSONB", async () => {
+      const pool = createMockPool([
+        {
+          ...mockZoneRow,
+          city_distance: [{ cityName: "Bridgewatch", hops: 2, meters: 185 }],
+        },
+      ]);
+      const repo = new ZoneRepository(pool);
+
+      const result = await repo.findAll({});
+
+      expect(result[0].cityDistances).toEqual([
+        { cityName: "Bridgewatch", hops: 2, meters: 185 },
+      ]);
+    });
+
     it("builds dynamic WHERE clause for filters", async () => {
       const pool = createMockPool([]);
       const repo = new ZoneRepository(pool);

@@ -3,6 +3,12 @@ import { useRemoveZone } from "../../hooks/useMapData";
 import { useMapStore } from "../../store/mapStore";
 import { formatZoneType, getResourceIcon } from "../zonePresentation";
 
+export function formatCityDistance(distance: { hops: number; meters?: number }) {
+  return distance.meters === undefined
+    ? `${distance.hops} hops`
+    : `${distance.hops} hops · ${distance.meters}m`;
+}
+
 export function ZoneInfoPanel() {
   const nodes = useMapStore((s) => s.nodes);
   const selectedNodeId = useMapStore((s) => s.selectedNodeId);
@@ -88,7 +94,7 @@ export function ZoneInfoPanel() {
                   <tr key={distance.cityName}>
                     <td style={tableCellStyle}>{distance.cityName}</td>
                     <td style={{ ...tableCellStyle, textAlign: "right" }}>
-                      {distance.hops} hops
+                      {formatCityDistance(distance)}
                     </td>
                   </tr>
                 ))}

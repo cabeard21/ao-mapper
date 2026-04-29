@@ -87,15 +87,15 @@ describe("RouteOptimizer", () => {
       findZoneById: async (id) =>
         id === "a"
           ? zone("a", "A", [
-              { cityName: "Bridgewatch", hops: 6 },
-              { cityName: "Caerleon", hops: 2 },
+              { cityName: "Bridgewatch", hops: 6, meters: 420 },
+              { cityName: "Caerleon", hops: 2, meters: 140 },
             ])
           : null,
     });
 
     await expect(optimizer.findCityDistances("a")).resolves.toEqual([
-      { cityName: "Caerleon", hops: 2 },
-      { cityName: "Bridgewatch", hops: 6 },
+      { cityName: "Caerleon", hops: 2, meters: 140 },
+      { cityName: "Bridgewatch", hops: 6, meters: 420 },
     ]);
   });
 

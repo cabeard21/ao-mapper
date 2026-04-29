@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "import": "ts-node src/index.ts",
+    "load": "ts-node src/index.ts",
     "build": "tsc --project tsconfig.json",
     "type-check": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
