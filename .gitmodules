@@ -10,3 +10,6 @@
 [submodule "refs/sniffer"]
 	path = refs/sniffer
 	url = https://github.com/AO-Noki/sniffer.git
+[submodule "refs/AlbionOnline-StatisticsAnalysis"]
+	path = refs/AlbionOnline-StatisticsAnalysis
+	url = https://github.com/Triky313/AlbionOnline-StatisticsAnalysis.git
