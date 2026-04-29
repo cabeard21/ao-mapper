@@ -132,12 +132,12 @@ psql $DATABASE_URL -c "\dt"   # shows zones, connections, node_positions
 - [ ] City distance pre-calculator: hardcode Caerleon, Bridgewatch, etc. as origin nodes; run BFS on static royal road connections from game data to populate `city_distance` JSONB
 - [ ] Upsert zones into PostgreSQL (idempotent: re-run is safe)
 - [ ] `packages/etl/src/importAvalonRoads.ts` — import avalon road zone metadata separately
-- [ ] NPM script: `pnpm --filter etl import` to run the full ETL
+- [ ] NPM script: `pnpm --filter @ao-mapper/etl load` to run the full ETL
 - [ ] Copy icon assets from `refs/avalon-roads/public/icons/` → `packages/frontend/public/icons/`
 
 **Verification**:
 ```bash
-pnpm --filter etl import
+pnpm --filter @ao-mapper/etl load
 psql $DATABASE_URL -c "SELECT count(*) FROM zones;"   # ~900+ zones expected
 psql $DATABASE_URL -c "SELECT unique_name, tier, zone_type FROM zones LIMIT 10;"
 ```
@@ -467,7 +467,7 @@ Post-MVP: Steps 13 (OCR), 14 (Packaging)
 ## Verification: End-to-End Test (MVP Complete)
 
 1. Run `docker compose up -d` → Postgres + Redis healthy
-2. Run `pnpm --filter etl import` → 800+ zones in DB
+2. Run `pnpm --filter @ao-mapper/etl load` → 800+ zones in DB
 3. Run `pnpm dev` → frontend on :5173, api on :3001
 4. Open browser → blank graph canvas visible
 5. Search "Tharcal Fissure" → add as node → info panel shows T6, zone type, resources

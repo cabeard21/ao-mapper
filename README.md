@@ -74,7 +74,7 @@ The API also runs migrations automatically on startup.
 Import zone data:
 
 ```bash
-pnpm --filter @ao-mapper/etl import
+pnpm --filter @ao-mapper/etl load
 ```
 
 Build all packages:
