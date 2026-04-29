@@ -4,7 +4,7 @@ import { extractCurrentZoneUniqueName, parseSnifferMessage } from "./photonMappe
 import { broadcastRealtimeEvent } from "./realtime";
 import type { ZoneLookupResult } from "./types";
 
-const DEFAULT_SNIFFER_WS_URL = "ws://localhost:10001/ws";
+const DEFAULT_SNIFFER_WS_URL = "ws://127.0.0.1:10001/ws";
 const DEFAULT_RECONNECT_MS = 5_000;
 
 export class SnifferClient {
@@ -20,6 +20,7 @@ export class SnifferClient {
 
   start(): void {
     this.stopped = false;
+    console.log(`[Sniffer] Connecting to ${this.url}`);
     this.connect();
   }
 
@@ -51,6 +52,7 @@ export class SnifferClient {
 
     socket.on("close", () => {
       if (!this.stopped) {
+        console.warn(`[Sniffer] Connection closed; retrying in ${this.reconnectMs}ms`);
         this.scheduleReconnect();
       }
     });
@@ -78,6 +80,7 @@ export class SnifferClient {
       return;
     }
 
+    console.log(`[Sniffer] Current zone received: ${uniqueName}`);
     const zone = await this.findZoneByUniqueName(uniqueName);
     if (!zone) {
       console.warn(`[Sniffer] Current zone not found in database: ${uniqueName}`);
@@ -85,6 +88,7 @@ export class SnifferClient {
       return;
     }
 
+    console.log(`[Sniffer] Current zone matched: ${zone.displayName} (${zone.id})`);
     broadcastRealtimeEvent({
       type: "zone:current",
       zoneId: zone.id,

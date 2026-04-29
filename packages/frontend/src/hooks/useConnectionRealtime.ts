@@ -1,5 +1,7 @@
 import { useEffect } from "react";
-import type { Connection } from "@ao-mapper/shared";
+import axios from "axios";
+import type { ApiResponse, Connection, Zone } from "@ao-mapper/shared";
+import { zoneToNode } from "../components/zonePresentation";
 import { connectionToEdge, useMapStore } from "../store/mapStore";
 
 type ConnectionEvent =
@@ -15,6 +17,15 @@ type ConnectionEvent =
       connectionIds?: string[];
       data?: string | { id?: string; connectionId?: string; connectionIds?: string[] };
     };
+
+type ZoneCurrentEvent = {
+  type: "zone:current";
+  zoneId: string | null;
+  uniqueName: string;
+  displayName?: string;
+};
+
+type RealtimeEvent = ConnectionEvent | ZoneCurrentEvent;
 
 function getWebSocketUrl() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -60,6 +71,9 @@ function extractConnectionIds(event: ConnectionEvent): string[] {
 export function useConnectionRealtime() {
   const upsertEdge = useMapStore((s) => s.upsertEdge);
   const removeEdge = useMapStore((s) => s.removeEdge);
+  const addNode = useMapStore((s) => s.addNode);
+  const setCurrentZone = useMapStore((s) => s.setCurrentZone);
+  const setSelectedNode = useMapStore((s) => s.setSelectedNode);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -71,10 +85,10 @@ export function useConnectionRealtime() {
     const connect = () => {
       socket = new WebSocket(getWebSocketUrl());
 
-      socket.onmessage = (message) => {
-        let event: ConnectionEvent;
+      socket.onmessage = async (message) => {
+        let event: RealtimeEvent;
         try {
-          event = JSON.parse(message.data) as ConnectionEvent;
+          event = JSON.parse(message.data) as RealtimeEvent;
         } catch {
           return;
         }
@@ -88,6 +102,34 @@ export function useConnectionRealtime() {
         if (event.type === "connection:deleted" || event.type === "connection:expired") {
           for (const id of extractConnectionIds(event)) {
             removeEdge(id);
+          }
+          return;
+        }
+
+        if (event.type === "zone:current") {
+          if (!event.zoneId) {
+            return;
+          }
+
+          const existingNode = useMapStore
+            .getState()
+            .nodes.find((node) => node.id === event.zoneId);
+          if (existingNode) {
+            setCurrentZone(event.zoneId);
+            setSelectedNode(event.zoneId);
+            return;
+          }
+
+          try {
+            const { data } = await axios.get<ApiResponse<Zone>>(`/api/zones/${event.zoneId}`);
+            if (data.success && data.data) {
+              addNode(zoneToNode(data.data));
+              setCurrentZone(data.data.id);
+              setSelectedNode(data.data.id);
+            }
+          } catch {
+            setCurrentZone(event.zoneId);
+            setSelectedNode(event.zoneId);
           }
         }
       };
@@ -106,5 +148,5 @@ export function useConnectionRealtime() {
       if (reconnectTimer) window.clearTimeout(reconnectTimer);
       socket?.close();
     };
-  }, [removeEdge, upsertEdge]);
+  }, [addNode, removeEdge, setCurrentZone, setSelectedNode, upsertEdge]);
 }

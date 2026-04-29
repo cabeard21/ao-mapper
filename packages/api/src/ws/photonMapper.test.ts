@@ -19,6 +19,21 @@ describe("photonMapper", () => {
     expect(extractCurrentZoneUniqueName(message)).toBe("OPEN_WORLD_BLACK_TharcalFissure");
   });
 
+  it("extracts display-name zone values from sidecar zone:current messages", () => {
+    const message = {
+      type: "photonEvent",
+      timestamp: 1679580125,
+      data: {
+        eventCode: "zone:current",
+        parameters: {
+          zoneUniqueName: "Drybasin Riverbed",
+        },
+      },
+    };
+
+    expect(extractCurrentZoneUniqueName(message)).toBe("Drybasin Riverbed");
+  });
+
   it("extracts a zone unique name from sniffer packet wrappers", () => {
     const message = {
       type: "packet",
