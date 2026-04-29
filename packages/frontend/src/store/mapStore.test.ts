@@ -46,7 +46,7 @@ describe("mapStore zone management", () => {
           id: "edge-1",
           source: "zone-1",
           target: "zone-2",
-          connType: "AVALON_ROAD",
+          connType: "PORTAL_7",
           label: "",
           durationHours: null,
           expiresAt: null,

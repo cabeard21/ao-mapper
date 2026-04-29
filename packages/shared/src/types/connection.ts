@@ -1,9 +1,4 @@
-export type ConnectionType =
-  | "BZ_PORTAL"
-  | "ROYAL_ROAD"
-  | "AVALON_ROAD"
-  | "TUNNEL"
-  | "HIGHWAY";
+export type ConnectionType = "PORTAL_7" | "PORTAL_20";
 
 export interface PortalTimer {
   durationHours: number;

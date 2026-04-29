@@ -17,7 +17,7 @@ const makeRow = (overrides: RowOverrides = {}) => ({
   id: "uuid-1",
   from_zone_id: "zone-a",
   to_zone_id: "zone-b",
-  conn_type: "BZ_PORTAL",
+  conn_type: "PORTAL_7",
   duration_hours: 22,
   expires_at: null,
   created_at: new Date("2026-01-01T00:00:00.000Z").toISOString(),
@@ -42,7 +42,7 @@ describe("ConnectionRepository", () => {
       id: "uuid-1",
       fromZoneId: "zone-a",
       toZoneId: "zone-b",
-      connType: "BZ_PORTAL",
+      connType: "PORTAL_7",
       durationHours: 22,
       expiresAt: null,
     });
@@ -58,7 +58,7 @@ describe("ConnectionRepository", () => {
     const created = await repo.create({
       fromZoneId: "zone-a",
       toZoneId: "zone-b",
-      connType: "BZ_PORTAL",
+      connType: "PORTAL_7",
       durationHours: 4,
     });
 
@@ -68,7 +68,7 @@ describe("ConnectionRepository", () => {
     const params = callArgs[1] as unknown[];
 
     expect(sql).toContain("INSERT INTO connections");
-    expect(params).toEqual(["zone-a", "zone-b", "BZ_PORTAL", 4, 4]);
+    expect(params).toEqual(["zone-a", "zone-b", "PORTAL_7", 4, 4]);
     expect(created.durationHours).toBe(4);
     expect(created.fromZoneId).toBe("zone-a");
   });
@@ -82,12 +82,12 @@ describe("ConnectionRepository", () => {
     const created = await repo.create({
       fromZoneId: "zone-a",
       toZoneId: "zone-b",
-      connType: "AVALON_ROAD",
+      connType: "PORTAL_20",
       durationHours: null,
     });
 
     const params = query.mock.calls[0][1] as unknown[];
-    expect(params).toEqual(["zone-a", "zone-b", "AVALON_ROAD", null, null]);
+    expect(params).toEqual(["zone-a", "zone-b", "PORTAL_20", null, null]);
     expect(created.durationHours).toBeNull();
     expect(created.expiresAt).toBeNull();
   });

@@ -8,13 +8,7 @@ import { broadcastRealtimeEvent } from "../ws/realtime";
 const router: ReturnType<typeof Router> = Router();
 const repo = new ConnectionRepository(pool);
 
-const connTypeEnum = z.enum([
-  "BZ_PORTAL",
-  "ROYAL_ROAD",
-  "AVALON_ROAD",
-  "TUNNEL",
-  "HIGHWAY",
-]);
+const connTypeEnum = z.enum(["PORTAL_7", "PORTAL_20"]);
 
 const createSchema = z.object({
   fromZoneId: z.string().uuid(),

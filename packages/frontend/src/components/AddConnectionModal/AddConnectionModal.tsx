@@ -9,24 +9,22 @@ import type { ConnectionType } from "@ao-mapper/shared";
 import { useConnectionActions } from "../../hooks/useConnectionActions";
 import { useMapStore } from "../../store/mapStore";
 
-const connectionTypes: Array<{ value: ConnectionType; label: string }> = [
-  { value: "BZ_PORTAL", label: "BZ portal" },
-  { value: "ROYAL_ROAD", label: "Royal road" },
-  { value: "AVALON_ROAD", label: "Avalon road" },
-  { value: "TUNNEL", label: "Tunnel" },
-  { value: "HIGHWAY", label: "Highway" },
+export const connectionTypes: Array<{ value: ConnectionType; label: string }> = [
+  { value: "PORTAL_7", label: "7 player" },
+  { value: "PORTAL_20", label: "20 player" },
 ];
 
-const durationOptions = [
+export const durationOptions = [
   { value: "", label: "Permanent" },
-  { value: "1", label: "1h" },
-  { value: "2", label: "2h" },
-  { value: "22", label: "22h" },
+  ...Array.from({ length: 24 }, (_, i) => ({
+    value: String(i + 1),
+    label: i === 0 ? "1 hour" : `${i + 1} hours`,
+  })),
 ];
 
 function getInitialDuration(edgeDuration: number | null | undefined): string {
   if (edgeDuration === undefined) {
-    return "22";
+    return "2";
   }
   return edgeDuration === null ? "" : String(edgeDuration);
 }
@@ -46,14 +44,14 @@ export function AddConnectionModal() {
   const toNode = nodes.find((node) => node.id === modal?.toNodeId);
 
   const [connType, setConnType] = useState<ConnectionType>(
-    editingEdge?.connType ?? "BZ_PORTAL"
+    editingEdge?.connType ?? "PORTAL_7"
   );
   const [durationHours, setDurationHours] = useState<string>(
     getInitialDuration(editingEdge?.durationHours)
   );
 
   useEffect(() => {
-    setConnType(editingEdge?.connType ?? "BZ_PORTAL");
+    setConnType(editingEdge?.connType ?? "PORTAL_7");
     setDurationHours(getInitialDuration(editingEdge?.durationHours));
   }, [editingEdge?.connType, editingEdge?.durationHours, modal?.edgeId]);
 

@@ -87,38 +87,17 @@ export const graphStyles: cytoscape.StylesheetStyle[] = [
     },
   },
   {
-    selector: 'edge[connType="BZ_PORTAL"]',
-    style: {
-      "line-color": "#ff8800",
-      "target-arrow-color": "#ff8800",
-    },
-  },
-  {
-    selector: 'edge[connType="ROYAL_ROAD"]',
+    selector: 'edge[connType="PORTAL_7"]',
     style: {
       "line-color": "#4488ff",
       "target-arrow-color": "#4488ff",
     },
   },
   {
-    selector: 'edge[connType="AVALON_ROAD"]',
+    selector: 'edge[connType="PORTAL_20"]',
     style: {
-      "line-color": "#aa44cc",
-      "target-arrow-color": "#aa44cc",
-    },
-  },
-  {
-    selector: 'edge[connType="TUNNEL"]',
-    style: {
-      "line-color": "#885522",
-      "target-arrow-color": "#885522",
-    },
-  },
-  {
-    selector: 'edge[connType="HIGHWAY"]',
-    style: {
-      "line-color": "#44aa44",
-      "target-arrow-color": "#44aa44",
+      "line-color": "#ff8800",
+      "target-arrow-color": "#ff8800",
     },
   },
   {

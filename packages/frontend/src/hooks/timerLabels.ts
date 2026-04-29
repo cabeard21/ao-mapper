@@ -7,11 +7,8 @@ interface TimedConnectionLike {
 }
 
 const typeLabels: Record<ConnectionType, string> = {
-  BZ_PORTAL: "BZ",
-  ROYAL_ROAD: "Royal",
-  AVALON_ROAD: "Avalon",
-  TUNNEL: "Tunnel",
-  HIGHWAY: "Highway",
+  PORTAL_7: "7 player",
+  PORTAL_20: "20 player",
 };
 
 export function formatRemainingTime(expiresAt: string | null, now = new Date()): string {

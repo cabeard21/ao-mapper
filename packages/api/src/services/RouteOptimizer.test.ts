@@ -3,7 +3,7 @@ import type { Connection, Zone } from "@ao-mapper/shared";
 import { RouteOptimizer, type RouteCache } from "./RouteOptimizer";
 
 const baseConnection = {
-  connType: "AVALON_ROAD",
+  connType: "PORTAL_7",
   durationHours: null,
   expiresAt: null,
   createdAt: "2026-01-01T00:00:00.000Z",
