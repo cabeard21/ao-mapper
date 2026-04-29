@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "pnpm --parallel --filter \"./packages/*\" dev",
+    "sniffer:dev": "dotnet run --project packages/sniffer/src/AoMapper.Sniffer.App --",
     "build": "pnpm --filter shared build && pnpm --parallel --filter \"!shared\" build",
     "test": "pnpm --recursive test",
     "lint": "pnpm --recursive lint",

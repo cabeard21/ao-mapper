@@ -49,7 +49,7 @@ The default environment values are:
 DATABASE_URL=postgresql://ao_mapper:ao_mapper@localhost:5432/ao_mapper
 REDIS_URL=redis://localhost:6379
 PORT=3001
-SNIFFER_WS_URL=ws://localhost:10001/ws
+SNIFFER_WS_URL=ws://127.0.0.1:10001/ws
 ```
 
 ## Development
@@ -62,6 +62,19 @@ pnpm dev
 
 The frontend runs on `http://localhost:5173` and proxies `/api` and `/ws`
 traffic to the API on `http://localhost:3001`.
+
+Run the Windows sniffer sidecar in a separate elevated terminal:
+
+```bash
+pnpm sniffer:dev -- --provider auto --host 127.0.0.1 --port 10001
+```
+
+The sidecar hosts `ws://127.0.0.1:10001/ws` and emits mapper-focused
+`zone:current` events when Albion Online join or cluster-change packets are
+observed. Windows raw-socket capture requires administrator privileges. Npcap
+is preferred when available, but `--provider raw` can be used explicitly for the
+current built-in fallback. The Python code under `refs/sniffer` is retained as a
+reference only and is not part of the runtime path.
 
 Run database migrations manually:
 
@@ -126,5 +139,5 @@ The API broadcasts realtime map changes over the `/ws` WebSocket endpoint.
 
 - `docs/description.txt` contains the product notes and longer-term feature
   goals.
-- The sniffer integration expects a local WebSocket service at `SNIFFER_WS_URL`
-  when packet-derived zone/location data is available.
+- The API sniffer integration expects the C# sidecar WebSocket service at
+  `SNIFFER_WS_URL` when packet-derived zone/location data is available.
