@@ -1,4 +1,5 @@
 import type { Resource, Zone, ZoneType } from "@ao-mapper/shared";
+import type { NodeSource } from "../store/mapStore";
 
 const zoneTypeLabels: Record<ZoneType, string> = {
   royal: "Royal",
@@ -32,10 +33,11 @@ export function getPrimaryZoneIcon(zone: Zone): string | undefined {
   return firstResource ? getResourceIcon(firstResource) : undefined;
 }
 
-export function zoneToNode(zone: Zone) {
+export function zoneToNode(zone: Zone, source: NodeSource = "manual") {
   return {
     id: zone.id,
     label: zone.displayName,
+    source,
     zoneType: zone.zoneType,
     tier: zone.tier,
     zone,

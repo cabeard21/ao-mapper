@@ -7,9 +7,12 @@ import type {
 } from "@ao-mapper/shared";
 import { formatConnectionLabel } from "../hooks/timerLabels";
 
+export type NodeSource = "manual" | "sniffed";
+
 export interface CytoNode {
   id: string;
   label: string;
+  source: NodeSource;
   zoneType: ZoneType;
   tier: number;
   zone: Zone;
@@ -51,6 +54,7 @@ interface MapState {
   addNode: (node: CytoNode) => void;
   removeNode: (id: string) => void;
   removeNodes: (ids: string[]) => void;
+  pruneIsolatedSniffedNodes: (options: { exceptNodeId: string }) => void;
   setNodes: (nodes: CytoNode[]) => void;
   addEdge: (edge: CytoEdge) => void;
   upsertEdge: (edge: CytoEdge) => void;
@@ -96,7 +100,17 @@ export const useMapStore = create<MapState>((set) => ({
     set((s) => {
       if (s.nodes.some((n) => n.id === node.id)) {
         return {
-          nodes: s.nodes.map((n) => (n.id === node.id ? node : n)),
+          nodes: s.nodes.map((n) =>
+            n.id === node.id
+              ? {
+                  ...node,
+                  source:
+                    n.source === "manual" || node.source === "manual"
+                      ? "manual"
+                      : "sniffed",
+                }
+              : n
+          ),
           selectedNodeId: node.id,
         };
       }
@@ -123,6 +137,56 @@ export const useMapStore = create<MapState>((set) => ({
         currentZoneId:
           s.currentZoneId && idSet.has(s.currentZoneId) ? null : s.currentZoneId,
         routePath: s.routePath.filter((zoneId) => !idSet.has(zoneId)),
+        pendingConnectionFromNodeId:
+          s.pendingConnectionFromNodeId && idSet.has(s.pendingConnectionFromNodeId)
+            ? null
+            : s.pendingConnectionFromNodeId,
+        connectionModal:
+          s.connectionModal &&
+          (idSet.has(s.connectionModal.fromNodeId) || idSet.has(s.connectionModal.toNodeId))
+            ? null
+            : s.connectionModal,
+      };
+    }),
+  pruneIsolatedSniffedNodes: ({ exceptNodeId }) =>
+    set((s) => {
+      const connectedNodeIds = new Set<string>();
+      for (const edge of s.edges) {
+        connectedNodeIds.add(edge.source);
+        connectedNodeIds.add(edge.target);
+      }
+
+      const idsToRemove = s.nodes
+        .filter(
+          (node) =>
+            node.source === "sniffed" &&
+            node.id !== exceptNodeId &&
+            !connectedNodeIds.has(node.id)
+        )
+        .map((node) => node.id);
+
+      if (idsToRemove.length === 0) {
+        return {};
+      }
+
+      const idSet = new Set(idsToRemove);
+      return {
+        nodes: s.nodes.filter((n) => !idSet.has(n.id)),
+        edges: s.edges.filter((e) => !idSet.has(e.source) && !idSet.has(e.target)),
+        selectedNodeId:
+          s.selectedNodeId && idSet.has(s.selectedNodeId) ? null : s.selectedNodeId,
+        currentZoneId:
+          s.currentZoneId && idSet.has(s.currentZoneId) ? null : s.currentZoneId,
+        routePath: s.routePath.filter((zoneId) => !idSet.has(zoneId)),
+        pendingConnectionFromNodeId:
+          s.pendingConnectionFromNodeId && idSet.has(s.pendingConnectionFromNodeId)
+            ? null
+            : s.pendingConnectionFromNodeId,
+        connectionModal:
+          s.connectionModal &&
+          (idSet.has(s.connectionModal.fromNodeId) || idSet.has(s.connectionModal.toNodeId))
+            ? null
+            : s.connectionModal,
       };
     }),
   setNodes: (nodes) => set({ nodes }),

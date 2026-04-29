@@ -72,6 +72,7 @@ export function useConnectionRealtime() {
   const upsertEdge = useMapStore((s) => s.upsertEdge);
   const removeEdge = useMapStore((s) => s.removeEdge);
   const addNode = useMapStore((s) => s.addNode);
+  const pruneIsolatedSniffedNodes = useMapStore((s) => s.pruneIsolatedSniffedNodes);
   const setCurrentZone = useMapStore((s) => s.setCurrentZone);
   const setSelectedNode = useMapStore((s) => s.setSelectedNode);
 
@@ -117,15 +118,17 @@ export function useConnectionRealtime() {
           if (existingNode) {
             setCurrentZone(event.zoneId);
             setSelectedNode(event.zoneId);
+            pruneIsolatedSniffedNodes({ exceptNodeId: event.zoneId });
             return;
           }
 
           try {
             const { data } = await axios.get<ApiResponse<Zone>>(`/api/zones/${event.zoneId}`);
             if (data.success && data.data) {
-              addNode(zoneToNode(data.data));
+              addNode(zoneToNode(data.data, "sniffed"));
               setCurrentZone(data.data.id);
               setSelectedNode(data.data.id);
+              pruneIsolatedSniffedNodes({ exceptNodeId: data.data.id });
             }
           } catch {
             setCurrentZone(event.zoneId);
@@ -148,5 +151,12 @@ export function useConnectionRealtime() {
       if (reconnectTimer) window.clearTimeout(reconnectTimer);
       socket?.close();
     };
-  }, [addNode, removeEdge, setCurrentZone, setSelectedNode, upsertEdge]);
+  }, [
+    addNode,
+    pruneIsolatedSniffedNodes,
+    removeEdge,
+    setCurrentZone,
+    setSelectedNode,
+    upsertEdge,
+  ]);
 }
