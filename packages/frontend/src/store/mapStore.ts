@@ -28,6 +28,11 @@ export interface CytoEdge {
   expiresAt: string | null;
 }
 
+export interface SavedNodePosition {
+  x: number;
+  y: number;
+}
+
 export interface PendingConnection {
   fromNodeId: string;
   toNodeId: string;
@@ -43,6 +48,7 @@ export interface EdgeContextMenuState {
 interface MapState {
   nodes: CytoNode[];
   edges: CytoEdge[];
+  savedNodePositions: Record<string, SavedNodePosition>;
   selectedNodeId: string | null;
   currentZoneId: string | null;
   routePath: string[];
@@ -57,6 +63,8 @@ interface MapState {
   removeNodes: (ids: string[]) => void;
   pruneIsolatedSniffedNodes: (options: { exceptNodeId: string }) => void;
   setNodes: (nodes: CytoNode[]) => void;
+  setSavedNodePositions: (positions: Record<string, SavedNodePosition>) => void;
+  upsertSavedNodePosition: (id: string, position: SavedNodePosition) => void;
   addEdge: (edge: CytoEdge) => void;
   upsertEdge: (edge: CytoEdge) => void;
   removeEdge: (id: string) => void;
@@ -86,9 +94,19 @@ export function connectionToEdge(connection: Connection, now = new Date()): Cyto
   };
 }
 
+function omitSavedPosition(
+  positions: Record<string, SavedNodePosition>,
+  idToRemove: string
+): Record<string, SavedNodePosition> {
+  return Object.fromEntries(
+    Object.entries(positions).filter(([id]) => id !== idToRemove)
+  );
+}
+
 export const useMapStore = create<MapState>((set) => ({
   nodes: [],
   edges: [],
+  savedNodePositions: {},
   selectedNodeId: null,
   currentZoneId: null,
   routePath: [],
@@ -141,21 +159,29 @@ export const useMapStore = create<MapState>((set) => ({
       };
     }),
   removeNode: (id) =>
-    set((s) => ({
-      nodes: s.nodes.filter((n) => n.id !== id),
-      edges: s.edges.filter((e) => e.source !== id && e.target !== id),
-      selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
-      currentZoneId: s.currentZoneId === id ? null : s.currentZoneId,
-      routePath: s.routePath.filter((zoneId) => zoneId !== id),
-      pendingConnectionFromNodeId:
-        s.pendingConnectionFromNodeId === id ? null : s.pendingConnectionFromNodeId,
-    })),
+    set((s) => {
+      const savedNodePositions = omitSavedPosition(s.savedNodePositions, id);
+      return {
+        nodes: s.nodes.filter((n) => n.id !== id),
+        edges: s.edges.filter((e) => e.source !== id && e.target !== id),
+        savedNodePositions,
+        selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
+        currentZoneId: s.currentZoneId === id ? null : s.currentZoneId,
+        routePath: s.routePath.filter((zoneId) => zoneId !== id),
+        pendingConnectionFromNodeId:
+          s.pendingConnectionFromNodeId === id ? null : s.pendingConnectionFromNodeId,
+      };
+    }),
   removeNodes: (ids) =>
     set((s) => {
       const idSet = new Set(ids);
+      const savedNodePositions = Object.fromEntries(
+        Object.entries(s.savedNodePositions).filter(([id]) => !idSet.has(id))
+      );
       return {
         nodes: s.nodes.filter((n) => !idSet.has(n.id)),
         edges: s.edges.filter((e) => !idSet.has(e.source) && !idSet.has(e.target)),
+        savedNodePositions,
         selectedNodeId:
           s.selectedNodeId && idSet.has(s.selectedNodeId) ? null : s.selectedNodeId,
         currentZoneId:
@@ -194,9 +220,13 @@ export const useMapStore = create<MapState>((set) => ({
       }
 
       const idSet = new Set(idsToRemove);
+      const savedNodePositions = Object.fromEntries(
+        Object.entries(s.savedNodePositions).filter(([id]) => !idSet.has(id))
+      );
       return {
         nodes: s.nodes.filter((n) => !idSet.has(n.id)),
         edges: s.edges.filter((e) => !idSet.has(e.source) && !idSet.has(e.target)),
+        savedNodePositions,
         selectedNodeId:
           s.selectedNodeId && idSet.has(s.selectedNodeId) ? null : s.selectedNodeId,
         currentZoneId:
@@ -214,6 +244,14 @@ export const useMapStore = create<MapState>((set) => ({
       };
     }),
   setNodes: (nodes) => set({ nodes }),
+  setSavedNodePositions: (positions) => set({ savedNodePositions: positions }),
+  upsertSavedNodePosition: (id, position) =>
+    set((s) => ({
+      savedNodePositions: {
+        ...s.savedNodePositions,
+        [id]: position,
+      },
+    })),
   addEdge: (edge) => set((s) => ({ edges: [...s.edges, edge] })),
   upsertEdge: (edge) =>
     set((s) => {

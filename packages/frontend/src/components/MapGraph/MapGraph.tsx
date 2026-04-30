@@ -1,8 +1,8 @@
 import cytoscape from "cytoscape";
 import fcose from "cytoscape-fcose";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import axios from "axios";
-import { useMapStore } from "../../store/mapStore";
+import { useMapStore, type SavedNodePosition } from "../../store/mapStore";
 import { AddConnectionModal } from "../AddConnectionModal/AddConnectionModal";
 import { ConnectionToolbar } from "../ConnectionToolbar/ConnectionToolbar";
 import { EdgeContextMenu } from "../EdgeContextMenu/EdgeContextMenu";
@@ -10,11 +10,6 @@ import { graphStyles } from "./graphStyles";
 import { getPrimaryZoneIcon } from "../zonePresentation";
 
 cytoscape.use(fcose);
-
-interface SavedPosition {
-  x: number;
-  y: number;
-}
 
 const defaultSettings: cytoscape.CytoscapeOptions = {
   minZoom: 0.05,
@@ -47,10 +42,10 @@ const defaultSettings: cytoscape.CytoscapeOptions = {
 export function MapGraph() {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
-  const savedPositionsRef = useRef<Record<string, SavedPosition>>({});
 
   const nodes = useMapStore((s) => s.nodes);
   const edges = useMapStore((s) => s.edges);
+  const savedNodePositions = useMapStore((s) => s.savedNodePositions);
   const selectedNodeId = useMapStore((s) => s.selectedNodeId);
   const currentZoneId = useMapStore((s) => s.currentZoneId);
   const routePath = useMapStore((s) => s.routePath);
@@ -59,8 +54,18 @@ export function MapGraph() {
     (s) => s.pendingConnectionFromNodeId
   );
   const setSelectedNode = useMapStore((s) => s.setSelectedNode);
+  const setSavedNodePositions = useMapStore((s) => s.setSavedNodePositions);
+  const upsertSavedNodePosition = useMapStore((s) => s.upsertSavedNodePosition);
   const openEdgeContextMenu = useMapStore((s) => s.openEdgeContextMenu);
   const closeEdgeContextMenu = useMapStore((s) => s.closeEdgeContextMenu);
+
+  const persistNodePosition = useCallback((node: cytoscape.NodeSingular) => {
+    const position = node.position() as SavedNodePosition;
+    upsertSavedNodePosition(node.id(), position);
+    axios.put(`/api/layout/${node.id()}`, position).catch(() => {
+      /* persistence is best-effort */
+    });
+  }, [upsertSavedNodePosition]);
 
   // Initialize Cytoscape
   useEffect(() => {
@@ -76,11 +81,11 @@ export function MapGraph() {
     axios
       .get<{
         success: boolean;
-        data: Record<string, SavedPosition>;
+        data: Record<string, SavedNodePosition>;
       }>("/api/layout")
       .then(({ data }) => {
         if (data.success && data.data) {
-          savedPositionsRef.current = data.data;
+          setSavedNodePositions(data.data);
           // Apply to any nodes already on the graph
           Object.entries(data.data).forEach(([id, pos]) => {
             const n = cy.$id(id);
@@ -133,12 +138,7 @@ export function MapGraph() {
     });
 
     cy.on("dragfree", "node", (evt) => {
-      const node = evt.target;
-      const pos = node.position();
-      savedPositionsRef.current[node.id()] = { x: pos.x, y: pos.y };
-      axios.put(`/api/layout/${node.id()}`, pos).catch(() => {
-        /* persistence is best-effort */
-      });
+      persistNodePosition(evt.target);
     });
 
     cyRef.current = cy;
@@ -146,7 +146,13 @@ export function MapGraph() {
       cy.destroy();
       cyRef.current = null;
     };
-  }, [closeEdgeContextMenu, openEdgeContextMenu, setSelectedNode]);
+  }, [
+    closeEdgeContextMenu,
+    openEdgeContextMenu,
+    persistNodePosition,
+    setSavedNodePositions,
+    setSelectedNode,
+  ]);
 
   // Sync nodes
   useEffect(() => {
@@ -162,7 +168,7 @@ export function MapGraph() {
 
     nodes.forEach((n) => {
       if (!existingIds.has(n.id)) {
-        const saved = savedPositionsRef.current[n.id];
+        const saved = savedNodePositions[n.id];
         cy.add({
           group: "nodes",
           data: {
@@ -175,11 +181,18 @@ export function MapGraph() {
           position: saved ? { x: saved.x, y: saved.y } : undefined,
         });
         if (!saved) {
-          cy.layout(defaultSettings.layout as cytoscape.LayoutOptions).run();
+          const layout = cy.layout(defaultSettings.layout as cytoscape.LayoutOptions);
+          layout.one("layoutstop", () => {
+            const node = cy.$id(n.id);
+            if (node.length > 0) {
+              persistNodePosition(node);
+            }
+          });
+          layout.run();
         }
       }
     });
-  }, [nodes]);
+  }, [nodes, persistNodePosition, savedNodePositions]);
 
   // Sync edges
   useEffect(() => {
@@ -222,7 +235,7 @@ export function MapGraph() {
         );
       }
     });
-  }, [edges]);
+  }, [edges, nodes]);
 
   // Selected highlight
   useEffect(() => {

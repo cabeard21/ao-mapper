@@ -38,7 +38,7 @@ function parseJsonField<T>(value: unknown, fallback: T): T {
   return value as T;
 }
 
-function rowToZone(row: ZoneRow): Zone {
+export function rowToZone(row: ZoneRow): Zone {
   const cityDistances = parseJsonField<CityDistance[]>(row.city_distance, []);
   const resources = parseJsonField<Resource[]>(row.resources, []);
   const metadata = parseJsonField<Record<string, unknown>>(row.metadata, {});

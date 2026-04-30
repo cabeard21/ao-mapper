@@ -4,12 +4,17 @@ import { MapGraph } from "./components/MapGraph/MapGraph";
 import { RoutePlanner } from "./components/RoutePlanner/RoutePlanner";
 import { ZoneInfoPanel } from "./components/ZoneInfoPanel/ZoneInfoPanel";
 import { ZoneSearch } from "./components/ZoneSearch/ZoneSearch";
-import { useConnections, useRemoveZone } from "./hooks/useMapData";
+import {
+  useConnections,
+  usePersistedLayoutNodes,
+  useRemoveZone,
+} from "./hooks/useMapData";
 import { useMapStore } from "./store/mapStore";
 
 const queryClient = new QueryClient();
 
 function MapApp() {
+  usePersistedLayoutNodes();
   useConnections();
   const selectedNodeId = useMapStore((s) => s.selectedNodeId);
   const removeZone = useRemoveZone();

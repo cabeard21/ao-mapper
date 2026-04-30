@@ -20,6 +20,7 @@ describe("mapStore zone management", () => {
     useMapStore.setState({
       nodes: [],
       edges: [],
+      savedNodePositions: {},
       selectedNodeId: null,
       currentZoneId: null,
       routePath: [],
@@ -55,6 +56,10 @@ describe("mapStore zone management", () => {
       selectedNodeId: "zone-1",
       currentZoneId: "zone-1",
       routePath: ["zone-1", "zone-2"],
+      savedNodePositions: {
+        "zone-1": { x: 1, y: 2 },
+        "zone-2": { x: 3, y: 4 },
+      },
     });
 
     useMapStore.getState().removeNode("zone-1");
@@ -64,6 +69,9 @@ describe("mapStore zone management", () => {
     expect(useMapStore.getState().selectedNodeId).toBeNull();
     expect(useMapStore.getState().currentZoneId).toBeNull();
     expect(useMapStore.getState().routePath).toEqual(["zone-2"]);
+    expect(useMapStore.getState().savedNodePositions).toEqual({
+      "zone-2": { x: 3, y: 4 },
+    });
   });
 
   it("prunes older sniffed nodes without active edges", () => {
@@ -94,6 +102,12 @@ describe("mapStore zone management", () => {
       currentZoneId: "zone-stale",
       routePath: ["zone-stale", "zone-connected"],
       pendingConnectionFromNodeId: "zone-stale",
+      savedNodePositions: {
+        "zone-current": { x: 1, y: 1 },
+        "zone-stale": { x: 2, y: 2 },
+        "zone-connected": { x: 3, y: 3 },
+        "zone-manual": { x: 4, y: 4 },
+      },
     });
 
     useMapStore.getState().pruneIsolatedSniffedNodes({ exceptNodeId: "zone-current" });
@@ -108,6 +122,11 @@ describe("mapStore zone management", () => {
     expect(useMapStore.getState().currentZoneId).toBeNull();
     expect(useMapStore.getState().routePath).toEqual(["zone-connected"]);
     expect(useMapStore.getState().pendingConnectionFromNodeId).toBeNull();
+    expect(useMapStore.getState().savedNodePositions).toEqual({
+      "zone-current": { x: 1, y: 1 },
+      "zone-connected": { x: 3, y: 3 },
+      "zone-manual": { x: 4, y: 4 },
+    });
   });
 
   it("does not downgrade manual nodes when re-added as sniffed", () => {
@@ -137,5 +156,20 @@ describe("mapStore zone management", () => {
       "zone-route",
     ]);
     expect(useMapStore.getState().selectedNodeId).toBe("zone-selected");
+  });
+
+  it("stores persisted node positions immutably", () => {
+    useMapStore.setState({
+      savedNodePositions: {
+        "zone-1": { x: 1, y: 2 },
+      },
+    });
+
+    useMapStore.getState().upsertSavedNodePosition("zone-2", { x: 3, y: 4 });
+
+    expect(useMapStore.getState().savedNodePositions).toEqual({
+      "zone-1": { x: 1, y: 2 },
+      "zone-2": { x: 3, y: 4 },
+    });
   });
 });

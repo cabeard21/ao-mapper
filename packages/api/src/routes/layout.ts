@@ -26,6 +26,16 @@ router.get("/", async (_req: Request, res: Response) => {
   }
 });
 
+router.get("/nodes", async (_req: Request, res: Response) => {
+  try {
+    const data = await repo.findAllNodes();
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error("[layout] findAllNodes failed:", err);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
+
 router.put("/:zoneId", async (req: Request, res: Response) => {
   try {
     const zoneId = zoneIdSchema.parse(req.params.zoneId);
@@ -38,6 +48,21 @@ router.put("/:zoneId", async (req: Request, res: Response) => {
       return;
     }
     console.error("[layout] upsert failed:", err);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
+
+router.delete("/:zoneId", async (req: Request, res: Response) => {
+  try {
+    const zoneId = zoneIdSchema.parse(req.params.zoneId);
+    await repo.delete(zoneId);
+    res.status(204).send();
+  } catch (err) {
+    if (err instanceof ZodError) {
+      res.status(400).json({ success: false, error: formatZodError(err) });
+      return;
+    }
+    console.error("[layout] delete failed:", err);
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
