@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RouteStep, Zone } from "@ao-mapper/shared";
 import { formatRouteCost, formatRouteDirection, routeHasDirections } from "./routePresentation";
+import { plannerStyle, resultsStyle, summaryStyle } from "./RoutePlanner";
 
 const zone = (zoneType: Zone["zoneType"]): Zone => ({
   id: "zone-1",
@@ -36,5 +37,19 @@ describe("routePresentation", () => {
   it("suppresses direction indicators for roads zones", () => {
     expect(routeHasDirections(step("black", "SW"))).toBe(true);
     expect(routeHasDirections(step("roads", "SW"))).toBe(false);
+  });
+
+  it("keeps dropdowns above the zone panel while long route summaries remain scrollable", () => {
+    expect(plannerStyle).toMatchObject({
+      flexShrink: 0,
+      overflowY: "visible",
+    });
+    expect(resultsStyle).toMatchObject({
+      zIndex: 100,
+    });
+    expect(summaryStyle).toMatchObject({
+      maxHeight: "32vh",
+      overflowY: "auto",
+    });
   });
 });

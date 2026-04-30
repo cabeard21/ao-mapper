@@ -115,6 +115,7 @@ export function RoutePlanner() {
   const [fromZone, setFromZone] = useState<Zone | null>(null);
   const [toZone, setToZone] = useState<Zone | null>(null);
   const addRouteNodes = useMapStore((s) => s.addRouteNodes);
+  const clearRoute = useMapStore((s) => s.clearRoute);
   const setRoutePath = useMapStore((s) => s.setRoutePath);
 
   const routeMutation = useMutation({
@@ -131,8 +132,9 @@ export function RoutePlanner() {
       return data.data;
     },
     onSuccess: (route) => {
+      clearRoute();
       setRoutePath(route.path ?? []);
-      addRouteNodes(route.steps.map((step) => zoneToNode(step.zone, "sniffed")));
+      addRouteNodes(route.steps.map((step) => zoneToNode(step.zone, "route")));
     },
   });
 
@@ -176,7 +178,7 @@ export function RoutePlanner() {
             onClick={() => {
               setFromZone(null);
               setToZone(null);
-              setRoutePath([]);
+              clearRoute();
               routeMutation.reset();
             }}
             style={secondaryButtonStyle}
@@ -233,12 +235,16 @@ export function RoutePlanner() {
   );
 }
 
-const plannerStyle = {
+export const plannerStyle = {
   boxSizing: "border-box" as const,
   borderBottom: "1px solid #2b2b3e",
   background: "#10101e",
   color: "#fff",
+  flexShrink: 0,
+  overflowY: "visible" as const,
   padding: 14,
+  position: "relative" as const,
+  zIndex: 20,
 };
 
 const titleStyle = {
@@ -281,12 +287,12 @@ const inputStyle = {
   padding: "8px 9px",
 };
 
-const resultsStyle = {
+export const resultsStyle = {
   position: "absolute" as const,
   top: "calc(100% + 4px)",
   left: 0,
   right: 0,
-  zIndex: 25,
+  zIndex: 100,
   maxHeight: 260,
   overflowY: "auto" as const,
   border: "1px solid #343448",
@@ -365,8 +371,10 @@ const errorStateStyle = {
   padding: 10,
 };
 
-const summaryStyle = {
+export const summaryStyle = {
   borderTop: "1px solid #28283a",
+  maxHeight: "32vh",
+  overflowY: "auto" as const,
   paddingTop: 10,
 };
 

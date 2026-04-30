@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Zone } from "@ao-mapper/shared";
-import { isNodePositionPersistable, useMapStore } from "./mapStore";
+import { isNodePositionPersistable, routePathToVisualEdges, useMapStore } from "./mapStore";
 import { zoneToNode } from "../components/zonePresentation";
 
 const makeZone = (id: string, displayName: string): Zone => ({
@@ -158,6 +158,33 @@ describe("mapStore zone management", () => {
     expect(useMapStore.getState().selectedNodeId).toBe("zone-selected");
   });
 
+  it("clears route-only nodes when clearing the active route", () => {
+    const routeZone = makeZone("zone-route", "Route Zone");
+    const manualZone = makeZone("zone-manual", "Manual Zone");
+    const sniffedZone = makeZone("zone-sniffed", "Sniffed Zone");
+
+    useMapStore.setState({
+      nodes: [
+        zoneToNode(routeZone, "route"),
+        zoneToNode(manualZone),
+        zoneToNode(sniffedZone, "sniffed"),
+      ],
+      selectedNodeId: "zone-route",
+      currentZoneId: "zone-route",
+      routePath: ["zone-route", "zone-manual"],
+    });
+
+    useMapStore.getState().clearRoute();
+
+    expect(useMapStore.getState().nodes.map((node) => node.id)).toEqual([
+      "zone-manual",
+      "zone-sniffed",
+    ]);
+    expect(useMapStore.getState().routePath).toEqual([]);
+    expect(useMapStore.getState().selectedNodeId).toBeNull();
+    expect(useMapStore.getState().currentZoneId).toBeNull();
+  });
+
   it("stores persisted node positions immutably", () => {
     useMapStore.setState({
       savedNodePositions: {
@@ -189,5 +216,32 @@ describe("mapStore zone management", () => {
         zoneToNode(sniffedZone, "sniffed"),
       ], "zone-sniffed")
     ).toBe(false);
+  });
+
+  it("creates visual-only edges between adjacent route nodes that are not already connected", () => {
+    expect(
+      routePathToVisualEdges(["zone-a", "zone-b", "zone-c"], [
+        {
+          id: "existing-bc",
+          source: "zone-b",
+          target: "zone-c",
+          connType: "PORTAL_7",
+          label: "",
+          durationHours: null,
+          expiresAt: null,
+        },
+      ])
+    ).toEqual([
+      {
+        id: "route:zone-a:zone-b",
+        source: "zone-a",
+        target: "zone-b",
+        connType: "PORTAL_7",
+        label: "",
+        durationHours: null,
+        expiresAt: null,
+        isRouteVisual: true,
+      },
+    ]);
   });
 });

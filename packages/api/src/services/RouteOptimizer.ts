@@ -58,13 +58,14 @@ interface AfmMetadata {
   id?: string;
   minimapBoundsMin?: Point;
   minimapBoundsMax?: Point;
+  worldmapposition?: Point | null;
   exits?: AfmPortalEdge[];
   portalEntrances?: AfmPortalEdge[];
   portalExits?: AfmPortalEdge[];
 }
 
 const routeCacheKey = (fromZoneId: string, toZoneId: string): string =>
-  `route:v2:${fromZoneId}:${toZoneId}`;
+  `route:v3:${fromZoneId}:${toZoneId}`;
 
 function isPoint(value: unknown): value is Point {
   return (
@@ -212,6 +213,33 @@ function directionFromPosition(zone: Zone, position: Point | undefined): RouteDi
   return `${northSouth}${westEast}` as RouteDirection;
 }
 
+function worldMapPosition(zone: Zone): Point | undefined {
+  const position = afmMetadata(zone)?.worldmapposition;
+  return isPoint(position) ? position : undefined;
+}
+
+function travelDirectionBetweenZones(zone: Zone, neighbor: Zone | undefined): RouteDirection | null {
+  if (zone.zoneType === "roads" || !neighbor) {
+    return null;
+  }
+
+  const currentPosition = worldMapPosition(zone);
+  const neighborPosition = worldMapPosition(neighbor);
+  if (!currentPosition || !neighborPosition) {
+    return null;
+  }
+
+  const deltaX = neighborPosition[0] - currentPosition[0];
+  const deltaY = neighborPosition[1] - currentPosition[1];
+  if (deltaX === 0 && deltaY === 0) {
+    return null;
+  }
+
+  const northSouth = deltaY < 0 ? "S" : "N";
+  const westEast = deltaX < 0 ? "W" : "E";
+  return `${northSouth}${westEast}` as RouteDirection;
+}
+
 function afmPositionForNeighbor(zone: Zone, neighbor: Zone): Point | undefined {
   const zoneAfm = afmMetadata(zone);
   const neighborAfm = afmMetadata(neighbor);
@@ -260,14 +288,18 @@ async function buildSteps(
 
     return {
       zone,
-      enterDirection: directionFromPosition(
-        zone,
-        edgePositionForZone(previousEdge, zoneId, zone, previousZone)
-      ),
-      exitDirection: directionFromPosition(
-        zone,
-        edgePositionForZone(nextEdge, zoneId, zone, nextZone)
-      ),
+      enterDirection:
+        travelDirectionBetweenZones(zone, previousZone) ??
+        directionFromPosition(
+          zone,
+          edgePositionForZone(previousEdge, zoneId, zone, previousZone)
+        ),
+      exitDirection:
+        travelDirectionBetweenZones(zone, nextZone) ??
+        directionFromPosition(
+          zone,
+          edgePositionForZone(nextEdge, zoneId, zone, nextZone)
+        ),
       sourceFromPrevious: previousEdge?.source ?? null,
       sourceToNext: nextEdge?.source ?? null,
     };

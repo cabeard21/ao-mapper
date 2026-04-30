@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import axios from "axios";
 import {
   isNodePositionPersistable,
+  routePathToVisualEdges,
   useMapStore,
   type SavedNodePosition,
 } from "../../store/mapStore";
@@ -11,6 +12,7 @@ import { AddConnectionModal } from "../AddConnectionModal/AddConnectionModal";
 import { ConnectionToolbar } from "../ConnectionToolbar/ConnectionToolbar";
 import { EdgeContextMenu } from "../EdgeContextMenu/EdgeContextMenu";
 import { graphStyles } from "./graphStyles";
+import { readableLayoutOptions, shouldLayoutAfterRouteVisualEdges } from "./graphLayout";
 import { getPrimaryZoneIcon } from "../zonePresentation";
 
 cytoscape.use(fcose);
@@ -25,22 +27,7 @@ const defaultSettings: cytoscape.CytoscapeOptions = {
   userPanningEnabled: true,
   boxSelectionEnabled: true,
   selectionType: "single",
-  layout: {
-    name: "fcose",
-    nodeDimensionsIncludeLabels: true,
-    idealEdgeLength: 70,
-    nestingFactor: 0.5,
-    fit: true,
-    randomize: true,
-    padding: 42,
-    animationDuration: 250,
-    tilingPaddingVertical: 20,
-    tilingPaddingHorizontal: 20,
-    nodeRepulsion: 4194304,
-    numIter: 2097152,
-    uniformNodeDimensions: true,
-    quality: "proof",
-  } as unknown as cytoscape.LayoutOptions,
+  layout: readableLayoutOptions,
 };
 
 export function MapGraph() {
@@ -174,6 +161,8 @@ export function MapGraph() {
       if (!storeIds.has(n.id())) cy.remove(n);
     });
 
+    let shouldRunLayout = false;
+
     nodes.forEach((n) => {
       if (!existingIds.has(n.id)) {
         const saved = savedNodePositions[n.id];
@@ -188,19 +177,22 @@ export function MapGraph() {
           },
           position: saved ? { x: saved.x, y: saved.y } : undefined,
         });
-        if (!saved) {
-          const layout = cy.layout(defaultSettings.layout as cytoscape.LayoutOptions);
-          layout.one("layoutstop", () => {
-            const node = cy.$id(n.id);
-            if (node.length > 0) {
-              persistNodePosition(node);
-            }
-          });
-          layout.run();
+        if (!saved && !(n.source === "route" && routePath.includes(n.id))) {
+          shouldRunLayout = true;
         }
       }
     });
-  }, [nodes, persistNodePosition, savedNodePositions]);
+
+    if (shouldRunLayout) {
+      const layout = cy.layout(defaultSettings.layout as cytoscape.LayoutOptions);
+      layout.one("layoutstop", () => {
+        cy.nodes().forEach((node) => {
+          persistNodePosition(node);
+        });
+      });
+      layout.run();
+    }
+  }, [nodes, persistNodePosition, routePath, savedNodePositions]);
 
   // Sync edges
   useEffect(() => {
@@ -275,8 +267,29 @@ export function MapGraph() {
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
+
+    cy.edges("[isRouteVisual]").remove();
+
+    let routeVisualEdgeCount = 0;
+    for (const edge of routePathToVisualEdges(routePath, edges)) {
+      if (cy.$id(edge.source).length > 0 && cy.$id(edge.target).length > 0) {
+        cy.add({
+          group: "edges",
+          data: {
+            id: edge.id,
+            source: edge.source,
+            target: edge.target,
+            connType: edge.connType,
+            label: edge.label,
+            isRouteVisual: true,
+          },
+        }).addClass("route-edge");
+        routeVisualEdgeCount += 1;
+      }
+    }
+
     cy.nodes().removeClass("route-node dimmed");
-    cy.edges().removeClass("route-edge");
+    cy.edges(":not([isRouteVisual])").removeClass("route-edge");
     if (routePath.length > 0) {
       cy.nodes().addClass("dimmed");
       routePath.forEach((id) => {
@@ -294,7 +307,11 @@ export function MapGraph() {
           .addClass("route-edge");
       }
     }
-  }, [routePath]);
+
+    if (shouldLayoutAfterRouteVisualEdges(routeVisualEdgeCount)) {
+      cy.layout(defaultSettings.layout as cytoscape.LayoutOptions).run();
+    }
+  }, [edges, nodes, routePath]);
 
   return (
     <div

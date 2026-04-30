@@ -7,7 +7,7 @@ import type {
 } from "@ao-mapper/shared";
 import { formatConnectionLabel } from "../hooks/timerLabels";
 
-export type NodeSource = "manual" | "sniffed";
+export type NodeSource = "manual" | "sniffed" | "route";
 
 export interface CytoNode {
   id: string;
@@ -26,6 +26,7 @@ export interface CytoEdge {
   label: string;
   durationHours: number | null;
   expiresAt: string | null;
+  isRouteVisual?: boolean;
 }
 
 export interface SavedNodePosition {
@@ -72,6 +73,7 @@ interface MapState {
   setSelectedNode: (id: string | null) => void;
   setCurrentZone: (id: string | null) => void;
   setRoutePath: (path: string[]) => void;
+  clearRoute: () => void;
   loadConnections: (connections: Connection[]) => void;
   refreshEdgeLabels: (now?: Date) => void;
   setConnectionDrawMode: (enabled: boolean) => void;
@@ -105,6 +107,35 @@ function omitSavedPosition(
 
 export function isNodePositionPersistable(nodes: CytoNode[], nodeId: string): boolean {
   return nodes.find((node) => node.id === nodeId)?.source === "manual";
+}
+
+function edgeConnects(edge: Pick<CytoEdge, "source" | "target">, from: string, to: string): boolean {
+  return (edge.source === from && edge.target === to) || (edge.source === to && edge.target === from);
+}
+
+export function routePathToVisualEdges(routePath: string[], existingEdges: CytoEdge[]): CytoEdge[] {
+  const visualEdges: CytoEdge[] = [];
+
+  for (let index = 0; index < routePath.length - 1; index += 1) {
+    const source = routePath[index];
+    const target = routePath[index + 1];
+    if (existingEdges.some((edge) => edgeConnects(edge, source, target))) {
+      continue;
+    }
+
+    visualEdges.push({
+      id: `route:${source}:${target}`,
+      source,
+      target,
+      connType: "PORTAL_7",
+      label: "",
+      durationHours: null,
+      expiresAt: null,
+      isRouteVisual: true,
+    });
+  }
+
+  return visualEdges;
 }
 
 export const useMapStore = create<MapState>((set) => ({
@@ -150,7 +181,9 @@ export const useMapStore = create<MapState>((set) => ({
             const source: NodeSource =
               node.source === "manual" || routeNode?.source === "manual"
                 ? "manual"
-                : "sniffed";
+                : node.source === "sniffed" || routeNode?.source === "sniffed"
+                  ? "sniffed"
+                  : "route";
             return routeNode
               ? {
                   ...routeNode,
@@ -272,6 +305,21 @@ export const useMapStore = create<MapState>((set) => ({
   setSelectedNode: (id) => set({ selectedNodeId: id }),
   setCurrentZone: (id) => set({ currentZoneId: id }),
   setRoutePath: (path) => set({ routePath: path }),
+  clearRoute: () =>
+    set((s) => {
+      const routeNodeIds = new Set(
+        s.nodes.filter((node) => node.source === "route").map((node) => node.id)
+      );
+
+      return {
+        nodes: s.nodes.filter((node) => node.source !== "route"),
+        routePath: [],
+        selectedNodeId:
+          s.selectedNodeId && routeNodeIds.has(s.selectedNodeId) ? null : s.selectedNodeId,
+        currentZoneId:
+          s.currentZoneId && routeNodeIds.has(s.currentZoneId) ? null : s.currentZoneId,
+      };
+    }),
 
   loadConnections: (connections) => {
     const now = new Date();

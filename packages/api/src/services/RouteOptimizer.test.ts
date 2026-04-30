@@ -206,6 +206,44 @@ describe("RouteOptimizer", () => {
     });
   });
 
+  it("uses world-map travel direction when AFM world positions are available", async () => {
+    const riverbed = zone("riverbed", "Drybasin Riverbed", [], "black", {
+      afm: {
+        id: "afm-riverbed",
+        minimapBoundsMin: [-415, -415],
+        minimapBoundsMax: [415, 415],
+        worldmapposition: [164.12, 147.57],
+      },
+    });
+    const oasis = zone("oasis", "Drybasin Oasis", [], "black", {
+      afm: {
+        id: "afm-oasis",
+        minimapBoundsMin: [-415, -415],
+        minimapBoundsMax: [415, 415],
+        worldmapposition: [149.98, 133.29],
+      },
+    });
+    const optimizer = new RouteOptimizer({
+      findActiveConnections: async () => [],
+      findStaticEdges: async () => [
+        {
+          fromZoneId: "riverbed",
+          toZoneId: "oasis",
+          fromPosition: [229.5, -378.5],
+          toPosition: [40.5, 378.5],
+        },
+      ],
+      findZoneById: zonesById([riverbed, oasis]),
+    });
+
+    await expect(optimizer.findRoute("riverbed", "oasis")).resolves.toMatchObject({
+      steps: [
+        { zone: riverbed, enterDirection: null, exitDirection: "SW" },
+        { zone: oasis, enterDirection: "NE", exitDirection: null },
+      ],
+    });
+  });
+
   it("returns city distances for a zone sorted by hop count", async () => {
     const optimizer = new RouteOptimizer({
       findActiveConnections: async () => [],
@@ -243,7 +281,7 @@ describe("RouteOptimizer", () => {
     await optimizer.invalidateRoutes();
 
     expect(findActiveConnections).toHaveBeenCalledTimes(1);
-    expect(cache.set).toHaveBeenCalledWith("route:v2:a:b", {
+    expect(cache.set).toHaveBeenCalledWith("route:v3:a:b", {
       path: ["a", "b"],
       hops: 1,
       cost: 1,
