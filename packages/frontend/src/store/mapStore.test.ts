@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Zone } from "@ao-mapper/shared";
-import { useMapStore } from "./mapStore";
+import { isNodePositionPersistable, useMapStore } from "./mapStore";
 import { zoneToNode } from "../components/zonePresentation";
 
 const makeZone = (id: string, displayName: string): Zone => ({
@@ -171,5 +171,23 @@ describe("mapStore zone management", () => {
       "zone-1": { x: 1, y: 2 },
       "zone-2": { x: 3, y: 4 },
     });
+  });
+
+  it("only allows manually added nodes to persist layout membership", () => {
+    const manualZone = makeZone("zone-manual", "Manual Zone");
+    const sniffedZone = makeZone("zone-sniffed", "Sniffed Zone");
+
+    expect(
+      isNodePositionPersistable([
+        zoneToNode(manualZone),
+        zoneToNode(sniffedZone, "sniffed"),
+      ], "zone-manual")
+    ).toBe(true);
+    expect(
+      isNodePositionPersistable([
+        zoneToNode(manualZone),
+        zoneToNode(sniffedZone, "sniffed"),
+      ], "zone-sniffed")
+    ).toBe(false);
   });
 });

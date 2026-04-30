@@ -2,7 +2,11 @@ import cytoscape from "cytoscape";
 import fcose from "cytoscape-fcose";
 import { useCallback, useEffect, useRef } from "react";
 import axios from "axios";
-import { useMapStore, type SavedNodePosition } from "../../store/mapStore";
+import {
+  isNodePositionPersistable,
+  useMapStore,
+  type SavedNodePosition,
+} from "../../store/mapStore";
 import { AddConnectionModal } from "../AddConnectionModal/AddConnectionModal";
 import { ConnectionToolbar } from "../ConnectionToolbar/ConnectionToolbar";
 import { EdgeContextMenu } from "../EdgeContextMenu/EdgeContextMenu";
@@ -60,6 +64,10 @@ export function MapGraph() {
   const closeEdgeContextMenu = useMapStore((s) => s.closeEdgeContextMenu);
 
   const persistNodePosition = useCallback((node: cytoscape.NodeSingular) => {
+    if (!isNodePositionPersistable(useMapStore.getState().nodes, node.id())) {
+      return;
+    }
+
     const position = node.position() as SavedNodePosition;
     upsertSavedNodePosition(node.id(), position);
     axios.put(`/api/layout/${node.id()}`, position).catch(() => {

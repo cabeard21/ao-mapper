@@ -103,6 +103,10 @@ function omitSavedPosition(
   );
 }
 
+export function isNodePositionPersistable(nodes: CytoNode[], nodeId: string): boolean {
+  return nodes.find((node) => node.id === nodeId)?.source === "manual";
+}
+
 export const useMapStore = create<MapState>((set) => ({
   nodes: [],
   edges: [],
