@@ -24,21 +24,47 @@ const connection = (
 const zone = (
   id: string,
   displayName: string,
-  cityDistances: Zone["cityDistances"] = []
+  cityDistances: Zone["cityDistances"] = [],
+  zoneType: Zone["zoneType"] = "black",
+  metadata: Zone["metadata"] = {}
 ): Zone => ({
   id,
   uniqueName: displayName.toUpperCase().replaceAll(" ", "_"),
   displayName,
   tier: 5,
-  zoneType: "black",
+  zoneType,
   cityDistances,
   resources: [],
-  metadata: {},
+  metadata,
   createdAt: "2026-01-01T00:00:00.000Z",
+});
+
+const zonesById = (zones: Zone[]) => {
+  const byId = new Map(zones.map((z) => [z.id, z]));
+  return async (id: string) => byId.get(id) ?? null;
+};
+
+const routeStep = (
+  zone: Zone,
+  enterDirection: string | null = null,
+  exitDirection: string | null = null,
+  sourceFromPrevious: string | null = null,
+  sourceToNext: string | null = null
+) => ({
+  zone,
+  enterDirection,
+  exitDirection,
+  sourceFromPrevious,
+  sourceToNext,
 });
 
 describe("RouteOptimizer", () => {
   it("returns the shortest path by hop count", async () => {
+    const zoneA = zone("a", "A");
+    const zoneB = zone("b", "B");
+    const zoneC = zone("c", "C");
+    const zoneD = zone("d", "D");
+    const zoneE = zone("e", "E");
     const optimizer = new RouteOptimizer({
       findActiveConnections: async () => [
         connection("ab", "a", "b"),
@@ -47,12 +73,19 @@ describe("RouteOptimizer", () => {
         connection("dc", "d", "c"),
         connection("ce", "c", "e"),
       ],
-      findZoneById: async () => null,
+      findZoneById: zonesById([zoneA, zoneB, zoneC, zoneD, zoneE]),
     });
 
     await expect(optimizer.findRoute("a", "e")).resolves.toEqual({
       path: ["a", "b", "c", "e"],
       hops: 3,
+      cost: 3,
+      steps: [
+        routeStep(zoneA, null, null, null, "active"),
+        routeStep(zoneB, null, null, "active", "active"),
+        routeStep(zoneC, null, null, "active", "active"),
+        routeStep(zoneE, null, null, "active", null),
+      ],
     });
   });
 
@@ -65,19 +98,111 @@ describe("RouteOptimizer", () => {
     await expect(optimizer.findRoute("a", "z")).resolves.toEqual({
       path: null,
       hops: null,
+      cost: null,
+      steps: [],
     });
   });
 
   it("combines active connections with static road edges", async () => {
+    const zoneA = zone("a", "A");
+    const zoneB = zone("b", "B");
+    const city = zone("city", "City");
     const optimizer = new RouteOptimizer({
       findActiveConnections: async () => [connection("ab", "a", "b")],
       findStaticEdges: async () => [{ fromZoneId: "b", toZoneId: "city" }],
-      findZoneById: async () => null,
+      findZoneById: zonesById([zoneA, zoneB, city]),
     });
 
     await expect(optimizer.findRoute("a", "city")).resolves.toEqual({
       path: ["a", "b", "city"],
       hops: 2,
+      cost: 2,
+      steps: [
+        routeStep(zoneA, null, null, null, "active"),
+        routeStep(zoneB, null, null, "active", "static"),
+        routeStep(city, null, null, "static", null),
+      ],
+    });
+  });
+
+  it("prefers lower weighted cost over fewer hops", async () => {
+    const zoneA = zone("a", "A");
+    const zoneB = zone("b", "B");
+    const zoneC = zone("c", "C");
+    const zoneD = zone("d", "D");
+    const optimizer = new RouteOptimizer({
+      findActiveConnections: async () => [],
+      findStaticEdges: async () => [
+        { fromZoneId: "a", toZoneId: "b", weight: 9 },
+        { fromZoneId: "a", toZoneId: "c", weight: 2 },
+        { fromZoneId: "c", toZoneId: "d", weight: 2 },
+        { fromZoneId: "d", toZoneId: "b", weight: 2 },
+      ],
+      findZoneById: zonesById([zoneA, zoneB, zoneC, zoneD]),
+    });
+
+    await expect(optimizer.findRoute("a", "b")).resolves.toMatchObject({
+      path: ["a", "c", "d", "b"],
+      hops: 3,
+      cost: 6,
+    });
+  });
+
+  it("adds AFM corner directions for non-road zones", async () => {
+    const zoneA = zone("a", "A", [], "black", {
+      afm: {
+        id: "afm-a",
+        minimapBoundsMin: [0, 0],
+        minimapBoundsMax: [100, 100],
+        exits: [
+          {
+            targetLocationId: "afm-b",
+            position: [90, 10],
+          },
+        ],
+      },
+    });
+    const zoneB = zone("b", "B", [], "black", {
+      afm: {
+        id: "afm-b",
+        minimapBoundsMin: [0, 0],
+        minimapBoundsMax: [100, 100],
+        exits: [
+          {
+            targetLocationId: "afm-a",
+            position: [10, 90],
+          },
+        ],
+      },
+    });
+    const roadsZone = zone("roads", "Roads", [], "roads", {
+      afm: {
+        id: "afm-roads",
+        minimapBoundsMin: [0, 0],
+        minimapBoundsMax: [100, 100],
+        exits: [
+          {
+            targetLocationId: "afm-b",
+            position: [90, 90],
+          },
+        ],
+      },
+    });
+    const optimizer = new RouteOptimizer({
+      findActiveConnections: async () => [],
+      findStaticEdges: async () => [
+        { fromZoneId: "a", toZoneId: "roads", fromPosition: [90, 10] },
+        { fromZoneId: "roads", toZoneId: "b", toPosition: [10, 90] },
+      ],
+      findZoneById: zonesById([zoneA, zoneB, roadsZone]),
+    });
+
+    await expect(optimizer.findRoute("a", "b")).resolves.toMatchObject({
+      steps: [
+        { zone: zoneA, enterDirection: null, exitDirection: "NE" },
+        { zone: roadsZone, enterDirection: null, exitDirection: null },
+        { zone: zoneB, enterDirection: "SW", exitDirection: null },
+      ],
     });
   });
 
@@ -118,10 +243,32 @@ describe("RouteOptimizer", () => {
     await optimizer.invalidateRoutes();
 
     expect(findActiveConnections).toHaveBeenCalledTimes(1);
-    expect(cache.set).toHaveBeenCalledWith("route:a:b", {
+    expect(cache.set).toHaveBeenCalledWith("route:v2:a:b", {
       path: ["a", "b"],
       hops: 1,
+      cost: 1,
+      steps: [],
     });
     expect(cache.deleteByPrefix).toHaveBeenCalledWith("route:");
+  });
+
+  it("recomputes routes when a cached result has the old shape", async () => {
+    const cache: RouteCache = {
+      get: vi.fn().mockResolvedValue({ path: ["legacy-a", "legacy-b"], hops: 1 }),
+      set: vi.fn().mockResolvedValue(undefined),
+      deleteByPrefix: vi.fn().mockResolvedValue(undefined),
+    };
+    const optimizer = new RouteOptimizer({
+      findActiveConnections: async () => [connection("ab", "a", "b")],
+      findZoneById: async () => null,
+      cache,
+    });
+
+    await expect(optimizer.findRoute("a", "b")).resolves.toEqual({
+      path: ["a", "b"],
+      hops: 1,
+      cost: 1,
+      steps: [],
+    });
   });
 });

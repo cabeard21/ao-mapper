@@ -13,22 +13,37 @@ interface WorldJson {
 
 interface ClusterEntry {
   "@id"?: string;
+  "@displayname"?: string;
   exits?: {
     exit?: ExitEntry[] | ExitEntry;
   };
 }
 
 interface ExitEntry {
+  "@id"?: string;
   "@targetid"?: string;
   "@targettype"?: string;
+  "@pos"?: string;
 }
 
 interface ZoneIdRow {
   id: string;
+  unique_name: string;
   display_name: string;
 }
 
-const WORLD_JSON_CANDIDATES = [
+type Point = [number, number];
+
+interface ClusterEdge {
+  fromClusterId: string;
+  toClusterId: string;
+  fromLookupKey: string;
+  toLookupKey: string;
+  toExitId?: string;
+  fromPosition?: Point;
+}
+
+const defaultWorldJsonCandidates = () => [
   path.resolve(process.cwd(), "refs/ao-bin-dumps/cluster/world.json"),
   path.resolve(process.cwd(), "../../refs/ao-bin-dumps/cluster/world.json"),
 ];
@@ -50,17 +65,52 @@ function targetClusterId(targetId: string | undefined): string | null {
     : null;
 }
 
-function readWorldJson(): WorldJson | null {
-  const filePath = WORLD_JSON_CANDIDATES.find((candidate) => existsSync(candidate));
+function targetExitId(targetId: string | undefined): string | undefined {
+  if (!targetId || !targetId.includes("@")) {
+    return undefined;
+  }
+  const [exitId] = targetId.split("@");
+  return exitId || undefined;
+}
+
+function parsePoint(value: string | undefined): Point | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const [x, y] = value.split(/\s+/).map((part) => Number(part));
+  return Number.isFinite(x) && Number.isFinite(y) ? [x, y] : undefined;
+}
+
+function readWorldJson(candidates: string[]): WorldJson | null {
+  const filePath = candidates.find((candidate) => existsSync(candidate));
   if (!filePath) {
     return null;
   }
   return JSON.parse(readFileSync(filePath, "utf8")) as WorldJson;
 }
 
+function distanceBetween(a: Point | undefined, b: Point | undefined): number | undefined {
+  if (!a || !b) {
+    return undefined;
+  }
+  return Math.max(1, Math.round(Math.hypot(a[0] - b[0], a[1] - b[1])));
+}
+
 function extractClusterEdges(worldJson: WorldJson): RouteEdge[] {
-  const clusterEdges: RouteEdge[] = [];
+  const clusterEdges: ClusterEdge[] = [];
+  const positionByClusterAndExit = new Map<string, Point>();
+  const displayNameByClusterId = new Map<string, string>();
+  const displayNameCounts = new Map<string, number>();
   const clusters = arrayOf(worldJson.world?.clusters?.cluster);
+
+  for (const cluster of clusters) {
+    const clusterId = cluster["@id"];
+    if (clusterId) {
+      const displayName = cluster["@displayname"] ?? clusterId;
+      displayNameByClusterId.set(clusterId, displayName);
+      displayNameCounts.set(displayName, (displayNameCounts.get(displayName) ?? 0) + 1);
+    }
+  }
 
   for (const cluster of clusters) {
     const fromClusterId = cluster["@id"];
@@ -69,57 +119,114 @@ function extractClusterEdges(worldJson: WorldJson): RouteEdge[] {
     }
 
     for (const exit of arrayOf(cluster.exits?.exit)) {
+      if (exit["@id"]) {
+        const position = parsePoint(exit["@pos"]);
+        if (position) {
+          positionByClusterAndExit.set(`${fromClusterId}:${exit["@id"]}`, position);
+        }
+      }
+
       if (exit["@targettype"] !== "Cluster") {
         continue;
       }
 
       const toClusterId = targetClusterId(exit["@targetid"]);
       if (toClusterId) {
-        clusterEdges.push({ fromZoneId: fromClusterId, toZoneId: toClusterId });
+        const fromDisplayName = displayNameByClusterId.get(fromClusterId) ?? fromClusterId;
+        const toDisplayName = displayNameByClusterId.get(toClusterId) ?? toClusterId;
+        clusterEdges.push({
+          fromClusterId,
+          toClusterId,
+          fromLookupKey:
+            (displayNameCounts.get(fromDisplayName) ?? 0) > 1
+              ? fromClusterId
+              : fromDisplayName,
+          toLookupKey:
+            (displayNameCounts.get(toDisplayName) ?? 0) > 1
+              ? toClusterId
+              : toDisplayName,
+          toExitId: targetExitId(exit["@targetid"]),
+          fromPosition: parsePoint(exit["@pos"]),
+        });
       }
     }
   }
 
-  return clusterEdges;
+  return clusterEdges.map((edge) => {
+    const toPosition = edge.toExitId
+      ? positionByClusterAndExit.get(`${edge.toClusterId}:${edge.toExitId}`)
+      : undefined;
+    return {
+      fromZoneId: edge.fromLookupKey,
+      toZoneId: edge.toLookupKey,
+      fromPosition: edge.fromPosition,
+      toPosition,
+      weight: distanceBetween(edge.fromPosition, toPosition),
+    };
+  });
 }
 
 export class StaticRoadRepository {
   private cachedEdges: RouteEdge[] | null = null;
 
-  constructor(private readonly pool: Pool) {}
+  constructor(
+    private readonly pool: Pool,
+    private readonly worldJsonCandidates = defaultWorldJsonCandidates()
+  ) {}
 
   async findEdges(): Promise<RouteEdge[]> {
     if (this.cachedEdges) {
       return this.cachedEdges;
     }
 
-    const worldJson = readWorldJson();
+    const worldJson = readWorldJson(this.worldJsonCandidates);
     if (!worldJson) {
       this.cachedEdges = [];
       return this.cachedEdges;
     }
 
     const clusterEdges = extractClusterEdges(worldJson);
-    const clusterIds = Array.from(
+    const lookupKeys = Array.from(
       new Set(clusterEdges.flatMap((edge) => [edge.fromZoneId, edge.toZoneId]))
     );
-    if (clusterIds.length === 0) {
+    if (lookupKeys.length === 0) {
       this.cachedEdges = [];
       return this.cachedEdges;
     }
 
     const result = await this.pool.query<ZoneIdRow>(
-      `SELECT id, display_name FROM zones WHERE display_name = ANY($1::text[])`,
-      [clusterIds]
+      `SELECT id, unique_name, display_name
+       FROM zones
+       WHERE unique_name = ANY($1::text[]) OR display_name = ANY($1::text[])`,
+      [lookupKeys]
     );
-    const zoneIdsByClusterId = new Map(
-      result.rows.map((row) => [row.display_name, row.id])
-    );
+    const displayCounts = new Map<string, number>();
+    for (const row of result.rows) {
+      displayCounts.set(row.display_name, (displayCounts.get(row.display_name) ?? 0) + 1);
+    }
+
+    const zoneIdsByLookupKey = new Map<string, string>();
+    for (const row of result.rows) {
+      zoneIdsByLookupKey.set(row.unique_name, row.id);
+      if ((displayCounts.get(row.display_name) ?? 0) === 1) {
+        zoneIdsByLookupKey.set(row.display_name, row.id);
+      }
+    }
 
     this.cachedEdges = clusterEdges.flatMap((edge) => {
-      const fromZoneId = zoneIdsByClusterId.get(edge.fromZoneId);
-      const toZoneId = zoneIdsByClusterId.get(edge.toZoneId);
-      return fromZoneId && toZoneId ? [{ fromZoneId, toZoneId }] : [];
+      const fromZoneId = zoneIdsByLookupKey.get(edge.fromZoneId);
+      const toZoneId = zoneIdsByLookupKey.get(edge.toZoneId);
+      return fromZoneId && toZoneId
+        ? [
+            {
+              fromZoneId,
+              toZoneId,
+              weight: edge.weight,
+              fromPosition: edge.fromPosition,
+              toPosition: edge.toPosition,
+            },
+          ]
+        : [];
     });
     return this.cachedEdges;
   }

@@ -120,4 +120,22 @@ describe("mapStore zone management", () => {
       expect.objectContaining({ id: "zone-1", source: "manual" }),
     ]);
   });
+
+  it("adds route nodes without changing the selected zone", () => {
+    const selectedZone = makeZone("zone-selected", "Selected Zone");
+    const routeZone = makeZone("zone-route", "Route Zone");
+
+    useMapStore.setState({
+      nodes: [zoneToNode(selectedZone)],
+      selectedNodeId: "zone-selected",
+    });
+
+    useMapStore.getState().addRouteNodes([zoneToNode(routeZone, "sniffed")]);
+
+    expect(useMapStore.getState().nodes.map((node) => node.id)).toEqual([
+      "zone-selected",
+      "zone-route",
+    ]);
+    expect(useMapStore.getState().selectedNodeId).toBe("zone-selected");
+  });
 });

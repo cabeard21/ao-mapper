@@ -133,9 +133,10 @@ export function ZoneInfoPanel() {
 }
 
 const panelStyle = {
-  width: 320,
+  width: "100%",
+  flex: 1,
+  minHeight: 0,
   boxSizing: "border-box" as const,
-  borderLeft: "1px solid #2b2b3e",
   background: "#121220",
   color: "#fff",
   overflowY: "auto" as const,

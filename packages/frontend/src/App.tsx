@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { MapGraph } from "./components/MapGraph/MapGraph";
+import { RoutePlanner } from "./components/RoutePlanner/RoutePlanner";
 import { ZoneInfoPanel } from "./components/ZoneInfoPanel/ZoneInfoPanel";
 import { ZoneSearch } from "./components/ZoneSearch/ZoneSearch";
 import { useConnections, useRemoveZone } from "./hooks/useMapData";
@@ -75,7 +76,21 @@ function MapApp() {
         <div style={{ flex: 1, minWidth: 0 }}>
           <MapGraph />
         </div>
-        <ZoneInfoPanel />
+        <aside
+          style={{
+            width: 380,
+            minWidth: 340,
+            boxSizing: "border-box",
+            borderLeft: "1px solid #2b2b3e",
+            background: "#121220",
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 0,
+          }}
+        >
+          <RoutePlanner />
+          <ZoneInfoPanel />
+        </aside>
       </main>
     </div>
   );

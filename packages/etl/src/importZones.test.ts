@@ -496,4 +496,31 @@ describe('importZones', () => {
       JSON.stringify({}),
     ])
   })
+
+  it('uses Index as uniqueName for duplicate indexed display names', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ao-mapper-etl-duplicate-display-'))
+    const worldJsonPath = join(dir, 'world.json')
+    const mapsJsonPath = join(dir, 'maps.json')
+    const clusterDir = mkdtempSync(join(tmpdir(), 'ao-mapper-cluster-duplicate-display-'))
+
+    writeFileSync(
+      worldJsonPath,
+      JSON.stringify([
+        { Index: 'BLACKBANK-2310', UniqueName: "Smuggler's Den" },
+        { Index: 'BLACKBANK-0321', UniqueName: "Smuggler's Den" },
+      ])
+    )
+    writeFileSync(mapsJsonPath, JSON.stringify({ maps: [] }))
+    writeFileSync(join(clusterDir, 'BLACKBANK-2310_CTY_HL_AUTO_T6_NON.cluster.xml'), '')
+    writeFileSync(join(clusterDir, 'BLACKBANK-0321_CTY_HL_AUTO_T6_NON.cluster.xml'), '')
+
+    const { pool, query } = createPoolMock()
+    await importZones(pool as unknown as Pool, { worldJsonPath, mapsJsonPath, clusterDir })
+
+    const calls = insertCalls(query)
+    expect(calls.map(([, params]) => [params[0], params[1]])).toEqual([
+      ['BLACKBANK-2310', "Smuggler's Den"],
+      ['BLACKBANK-0321', "Smuggler's Den"],
+    ])
+  })
 })

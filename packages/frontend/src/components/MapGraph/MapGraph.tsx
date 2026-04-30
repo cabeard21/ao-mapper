@@ -261,6 +261,17 @@ export function MapGraph() {
       routePath.forEach((id) => {
         cy.$id(id).removeClass("dimmed").addClass("route-node");
       });
+      for (let index = 0; index < routePath.length - 1; index += 1) {
+        const from = routePath[index];
+        const to = routePath[index + 1];
+        cy.edges()
+          .filter((edge) => {
+            const source = edge.data("source") as string;
+            const target = edge.data("target") as string;
+            return (source === from && target === to) || (source === to && target === from);
+          })
+          .addClass("route-edge");
+      }
     }
   }, [routePath]);
 

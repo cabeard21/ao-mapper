@@ -469,7 +469,8 @@ function mapResourcesToZoneResources(
 function buildZoneRecord(
   entry: WorldEntry,
   mapsIndex: Map<string, MapEntry>,
-  clusterIndex: Map<string, ClusterInfo>
+  clusterIndex: Map<string, ClusterInfo>,
+  duplicateIndexedDisplayNames: Set<string> = new Set()
 ): ZoneRecord {
   // Numeric Index (e.g. "4206") and coded Index (e.g. "TNL-001", "PSG-0039#2") both store
   // the human-readable display name in UniqueName. Text Index (e.g. "Deepwood Dell") is itself the display name.
@@ -477,6 +478,10 @@ function buildZoneRecord(
   const isCoded = /^[A-Z]+-\d+/.test(entry.Index)
   const isIndexedEntry = isNumeric || isCoded
   const displayName = isIndexedEntry ? entry.UniqueName : entry.Index
+  const uniqueName =
+    isIndexedEntry && duplicateIndexedDisplayNames.has(displayName)
+      ? entry.Index
+      : entry.UniqueName
 
   let tier = isIndexedEntry ? 0 : extractTier(entry.UniqueName)
 
@@ -506,7 +511,7 @@ function buildZoneRecord(
     : {}
 
   return {
-    uniqueName: entry.UniqueName,
+    uniqueName,
     displayName,
     tier,
     zoneType,
@@ -514,6 +519,20 @@ function buildZoneRecord(
     cityDistance: [],
     metadata,
   }
+}
+
+function duplicateIndexedDisplayNames(entries: WorldEntry[]): Set<string> {
+  const counts = new Map<string, number>()
+  for (const entry of entries) {
+    const isIndexedEntry = /^\d+$/.test(entry.Index) || /^[A-Z]+-\d+/.test(entry.Index)
+    if (!isIndexedEntry) continue
+    counts.set(entry.UniqueName, (counts.get(entry.UniqueName) ?? 0) + 1)
+  }
+  return new Set(
+    [...counts.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([displayName]) => displayName)
+  )
 }
 
 const UPSERT_SQL = `
@@ -571,7 +590,10 @@ export async function importZones(
   const clusterIndex = buildClusterIndex(paths.clusterDir)
 
   const filtered = world.filter((entry) => !shouldSkipEntry(entry.Index))
-  const records = filtered.map((entry) => buildZoneRecord(entry, mapsIndex, clusterIndex))
+  const duplicateDisplayNames = duplicateIndexedDisplayNames(filtered)
+  const records = filtered.map((entry) =>
+    buildZoneRecord(entry, mapsIndex, clusterIndex, duplicateDisplayNames)
+  )
   const afmLocations = await loadAfmLocations(
     paths.afmLocationsUrl ?? process.env.AFM_ALBION_LOCATIONS_URL ?? DEFAULT_AFM_LOCATIONS_URL
   )

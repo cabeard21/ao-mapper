@@ -52,6 +52,7 @@ interface MapState {
   edgeContextMenu: EdgeContextMenuState | null;
 
   addNode: (node: CytoNode) => void;
+  addRouteNodes: (nodes: CytoNode[]) => void;
   removeNode: (id: string) => void;
   removeNodes: (ids: string[]) => void;
   pruneIsolatedSniffedNodes: (options: { exceptNodeId: string }) => void;
@@ -115,6 +116,29 @@ export const useMapStore = create<MapState>((set) => ({
         };
       }
       return { nodes: [...s.nodes, node], selectedNodeId: node.id };
+    }),
+  addRouteNodes: (routeNodes) =>
+    set((s) => {
+      const routeNodeById = new Map(routeNodes.map((node) => [node.id, node]));
+      const existingIds = new Set(s.nodes.map((node) => node.id));
+      return {
+        nodes: [
+          ...s.nodes.map((node) => {
+            const routeNode = routeNodeById.get(node.id);
+            const source: NodeSource =
+              node.source === "manual" || routeNode?.source === "manual"
+                ? "manual"
+                : "sniffed";
+            return routeNode
+              ? {
+                  ...routeNode,
+                  source,
+                }
+              : node;
+          }),
+          ...routeNodes.filter((node) => !existingIds.has(node.id)),
+        ],
+      };
     }),
   removeNode: (id) =>
     set((s) => ({

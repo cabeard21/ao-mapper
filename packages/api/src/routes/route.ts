@@ -1,7 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import type { ApiResponse, CityDistance } from "@ao-mapper/shared";
-import type { RouteResult } from "../services/RouteOptimizer";
+import type { ApiResponse, CityDistance, RouteResult } from "@ao-mapper/shared";
 import { routeOptimizer } from "../services/routeOptimizerInstance";
 
 const router: ReturnType<typeof Router> = Router();
