@@ -20,6 +20,7 @@ Personal Albion Online portal mapping tool. Localhost-only, single-user, Windows
 |---------|---------|
 | `packages/api` | Express REST API + WebSocket server (port 3001) |
 | `packages/frontend` | React SPA (port 5173) |
+| `packages/sniffer` | .NET packet sniffer — forwards zone events to API via WS (port 10001) |
 | `packages/etl` | One-shot zone data import from game files |
 | `packages/shared` | Shared TypeScript types (`Zone`, `Connection`, `ApiResponse<T>`) |
 | `refs/` | Reference repos — read for patterns/data, never modified at runtime |
@@ -39,8 +40,11 @@ pnpm --filter api db:migrate
 # Import game data (one-time, or after game patch)
 pnpm --filter @ao-mapper/etl load
 
-# Start all packages in dev mode
+# Start all packages in dev mode (API + frontend)
 pnpm dev
+
+# Start the sniffer (separate terminal)
+pnpm sniffer:dev             # .NET sniffer → WS :10001
 
 # Start individually
 pnpm --filter api dev        # :3001
@@ -95,8 +99,8 @@ Zustand store (`mapStore.ts`) owns all graph state. All mutations must be immuta
 Each component lives in its own directory: `components/ComponentName/ComponentName.tsx`.
 
 ### Real-time events
-WebSocket message types: `connection:created`, `connection:deleted`, `connection:expired`, `zone:current`, `route:updated`.
-Sniffer (Python, port 10001) → API WS client → broadcast to frontend.
+WebSocket message types: `connection:created`, `connection:updated`, `connection:deleted`, `connection:expired`, `zone:current`, `route:updated`.
+Sniffer (.NET, `pnpm sniffer:dev`, port 10001) → API WS client → broadcast to frontend.
 
 ## Environment Variables
 
