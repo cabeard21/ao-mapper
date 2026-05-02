@@ -16,6 +16,7 @@ export interface RouteEdge {
   weight?: number;
   fromPosition?: Point;
   toPosition?: Point;
+  directed?: boolean;
 }
 
 export interface RouteCache {
@@ -65,7 +66,7 @@ interface AfmMetadata {
 }
 
 const routeCacheKey = (fromZoneId: string, toZoneId: string): string =>
-  `route:v3:${fromZoneId}:${toZoneId}`;
+  `route:v4:${fromZoneId}:${toZoneId}`;
 
 function isPoint(value: unknown): value is Point {
   return (
@@ -125,14 +126,19 @@ function buildGraph(connections: Connection[], staticEdges: RouteEdge[]): RouteG
     });
   }
   for (const edge of staticEdges) {
-    addUndirectedEdge(graph, {
+    const graphEdge: GraphEdge = {
       fromZoneId: edge.fromZoneId,
       toZoneId: edge.toZoneId,
       weight: edgeWeight(edge.weight),
       source: "static",
       fromPosition: edge.fromPosition,
       toPosition: edge.toPosition,
-    });
+    };
+    if (edge.directed) {
+      graph.set(edge.fromZoneId, [...(graph.get(edge.fromZoneId) ?? []), graphEdge]);
+    } else {
+      addUndirectedEdge(graph, graphEdge);
+    }
   }
   return graph;
 }

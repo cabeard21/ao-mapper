@@ -70,6 +70,69 @@ function writeWorldJson(): string {
   return worldJsonPath;
 }
 
+function writeWeightedWorldJson(): string {
+  const dir = mkdtempSync(join(tmpdir(), "ao-mapper-static-roads-"));
+  const worldJsonPath = join(dir, "world.json");
+  // Zone A: one exit to B at (100, 0). Zone B: entry from A at (-100, 0), exit to C at (100, 0).
+  // In-zone distance in B = dist((-100,0), (100,0)) = 200.
+  writeFileSync(
+    worldJsonPath,
+    JSON.stringify({
+      world: {
+        clusters: {
+          cluster: [
+            {
+              "@id": "ZA",
+              "@displayname": "Zone A",
+              exits: {
+                exit: {
+                  "@id": "a-to-b",
+                  "@targetid": "b-from-a@ZB",
+                  "@targettype": "Cluster",
+                  "@pos": "100 0",
+                },
+              },
+            },
+            {
+              "@id": "ZB",
+              "@displayname": "Zone B",
+              exits: {
+                exit: [
+                  {
+                    "@id": "b-from-a",
+                    "@targetid": "a-to-b@ZA",
+                    "@targettype": "Cluster",
+                    "@pos": "-100 0",
+                  },
+                  {
+                    "@id": "b-to-c",
+                    "@targetid": "c-from-b@ZC",
+                    "@targettype": "Cluster",
+                    "@pos": "100 0",
+                  },
+                ],
+              },
+            },
+            {
+              "@id": "ZC",
+              "@displayname": "Zone C",
+              exits: {
+                exit: {
+                  "@id": "c-from-b",
+                  "@targetid": "b-to-c@ZB",
+                  "@targettype": "Cluster",
+                  "@pos": "-100 0",
+                },
+              },
+            },
+          ],
+        },
+      },
+    })
+  );
+  return worldJsonPath;
+}
+
 function createPool(rows: object[]): Pool {
   return {
     query: vi.fn().mockResolvedValue({ rows, rowCount: rows.length }),
@@ -87,6 +150,27 @@ describe("StaticRoadRepository", () => {
     const repo = new StaticRoadRepository(pool, [worldJsonPath]);
 
     await expect(repo.findEdges()).resolves.toEqual([]);
+  });
+
+  it("weights edges by in-zone traversal distance in the destination cluster", async () => {
+    const worldJsonPath = writeWeightedWorldJson();
+    const pool = createPool([
+      { id: "za", unique_name: "Zone A", display_name: "Zone A" },
+      { id: "zb", unique_name: "Zone B", display_name: "Zone B" },
+      { id: "zc", unique_name: "Zone C", display_name: "Zone C" },
+    ]);
+    const repo = new StaticRoadRepository(pool, [worldJsonPath]);
+    const edges = await repo.findEdges();
+
+    // A→B: entry in B at (-100,0), exit from B at (100,0) → weight = 200
+    const abEdge = edges.find((e) => e.fromZoneId === "za" && e.toZoneId === "zb");
+    expect(abEdge?.weight).toBe(200);
+    expect(abEdge?.directed).toBe(true);
+
+    // B→C: entry in C at (-100,0) is the only exit from C (no other exits to traverse to),
+    // so weight is undefined — RouteOptimizer.edgeWeight() will fall back to 1.
+    const bcEdge = edges.find((e) => e.fromZoneId === "zb" && e.toZoneId === "zc");
+    expect(bcEdge?.weight).toBeUndefined();
   });
 
   it("resolves duplicate display-name clusters by unique cluster id when imported distinctly", async () => {

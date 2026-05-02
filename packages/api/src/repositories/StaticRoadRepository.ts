@@ -89,16 +89,24 @@ function readWorldJson(candidates: string[]): WorldJson | null {
   return JSON.parse(readFileSync(filePath, "utf8")) as WorldJson;
 }
 
-function distanceBetween(a: Point | undefined, b: Point | undefined): number | undefined {
-  if (!a || !b) {
-    return undefined;
-  }
+function distanceBetween(a: Point, b: Point): number {
   return Math.max(1, Math.round(Math.hypot(a[0] - b[0], a[1] - b[1])));
+}
+
+function minExitDistance(entry: Point | undefined, exits: Point[]): number | undefined {
+  if (!entry || exits.length === 0) return undefined;
+  let min = Number.POSITIVE_INFINITY;
+  for (const exit of exits) {
+    const d = distanceBetween(entry, exit);
+    if (d < min) min = d;
+  }
+  return min === Number.POSITIVE_INFINITY ? undefined : min;
 }
 
 function extractClusterEdges(worldJson: WorldJson): RouteEdge[] {
   const clusterEdges: ClusterEdge[] = [];
   const positionByClusterAndExit = new Map<string, Point>();
+  const exitPositionsByCluster = new Map<string, Point[]>();
   const displayNameByClusterId = new Map<string, string>();
   const displayNameCounts = new Map<string, number>();
   const clusters = arrayOf(worldJson.world?.clusters?.cluster);
@@ -123,6 +131,10 @@ function extractClusterEdges(worldJson: WorldJson): RouteEdge[] {
         const position = parsePoint(exit["@pos"]);
         if (position) {
           positionByClusterAndExit.set(`${fromClusterId}:${exit["@id"]}`, position);
+          exitPositionsByCluster.set(fromClusterId, [
+            ...(exitPositionsByCluster.get(fromClusterId) ?? []),
+            position,
+          ]);
         }
       }
 
@@ -152,16 +164,29 @@ function extractClusterEdges(worldJson: WorldJson): RouteEdge[] {
     }
   }
 
+  // World.json lists exits from both sides of each connection, so we return one
+  // directed edge per cluster exit. The reverse direction comes from the other
+  // cluster's own exit entry, giving each direction its own correct weight.
   return clusterEdges.map((edge) => {
     const toPosition = edge.toExitId
       ? positionByClusterAndExit.get(`${edge.toClusterId}:${edge.toExitId}`)
       : undefined;
+    // Weight = minimum in-zone traversal distance in the destination cluster:
+    // from the entry point (toPosition) to the nearest other exit. Both
+    // coordinates are in the destination cluster's local space. The entry exit
+    // itself is excluded so we measure traversal to a different exit, not
+    // a U-turn back to where we came from.
+    const allDestExits = exitPositionsByCluster.get(edge.toClusterId) ?? [];
+    const destExits = toPosition
+      ? allDestExits.filter((p) => !(p[0] === toPosition[0] && p[1] === toPosition[1]))
+      : allDestExits;
     return {
       fromZoneId: edge.fromLookupKey,
       toZoneId: edge.toLookupKey,
       fromPosition: edge.fromPosition,
       toPosition,
-      weight: distanceBetween(edge.fromPosition, toPosition),
+      weight: minExitDistance(toPosition, destExits),
+      directed: true,
     };
   });
 }
@@ -224,6 +249,7 @@ export class StaticRoadRepository {
               weight: edge.weight,
               fromPosition: edge.fromPosition,
               toPosition: edge.toPosition,
+              directed: edge.directed,
             },
           ]
         : [];
