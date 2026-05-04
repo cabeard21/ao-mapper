@@ -25,7 +25,14 @@ type ZoneCurrentEvent = {
   displayName?: string;
 };
 
-type RealtimeEvent = ConnectionEvent | ZoneCurrentEvent;
+type OcrResultEvent = {
+  type: "ocr:result";
+  toZone: { id: string; uniqueName: string; displayName: string };
+  connType: "PORTAL_7" | "PORTAL_20";
+  closesInMinutes: number;
+};
+
+type RealtimeEvent = ConnectionEvent | ZoneCurrentEvent | OcrResultEvent;
 
 function getWebSocketUrl() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -72,9 +79,10 @@ export function useConnectionRealtime() {
   const upsertEdge = useMapStore((s) => s.upsertEdge);
   const removeEdge = useMapStore((s) => s.removeEdge);
   const addNode = useMapStore((s) => s.addNode);
-  const pruneIsolatedSniffedNodes = useMapStore((s) => s.pruneIsolatedSniffedNodes);
+  const pruneIsolatedNodes = useMapStore((s) => s.pruneIsolatedNodes);
   const setCurrentZone = useMapStore((s) => s.setCurrentZone);
   const setSelectedNode = useMapStore((s) => s.setSelectedNode);
+  const setPendingOcrResult = useMapStore((s) => s.setPendingOcrResult);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -104,6 +112,16 @@ export function useConnectionRealtime() {
           for (const id of extractConnectionIds(event)) {
             removeEdge(id);
           }
+          pruneIsolatedNodes();
+          return;
+        }
+
+        if (event.type === "ocr:result") {
+          setPendingOcrResult({
+            toZone: event.toZone,
+            connType: event.connType,
+            closesInMinutes: event.closesInMinutes,
+          });
           return;
         }
 
@@ -118,7 +136,7 @@ export function useConnectionRealtime() {
           if (existingNode) {
             setCurrentZone(event.zoneId);
             setSelectedNode(event.zoneId);
-            pruneIsolatedSniffedNodes({ exceptNodeId: event.zoneId });
+            pruneIsolatedNodes(event.zoneId);
             return;
           }
 
@@ -128,7 +146,7 @@ export function useConnectionRealtime() {
               addNode(zoneToNode(data.data, "sniffed"));
               setCurrentZone(data.data.id);
               setSelectedNode(data.data.id);
-              pruneIsolatedSniffedNodes({ exceptNodeId: data.data.id });
+              pruneIsolatedNodes(data.data.id);
             }
           } catch {
             setCurrentZone(event.zoneId);
@@ -153,10 +171,11 @@ export function useConnectionRealtime() {
     };
   }, [
     addNode,
-    pruneIsolatedSniffedNodes,
+    pruneIsolatedNodes,
     removeEdge,
     setCurrentZone,
     setSelectedNode,
+    setPendingOcrResult,
     upsertEdge,
   ]);
 }

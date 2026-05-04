@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type {
   Connection,
   ConnectionType,
+  OcrResult,
   Zone,
   ZoneType,
 } from "@ao-mapper/shared";
@@ -46,23 +47,37 @@ export interface EdgeContextMenuState {
   y: number;
 }
 
+export interface NodeContextMenuState {
+  nodeId: string;
+  x: number;
+  y: number;
+}
+
+export type ViewportCommand =
+  | { type: "fit" }
+  | { type: "center"; nodeId: string };
+
 interface MapState {
   nodes: CytoNode[];
   edges: CytoEdge[];
   savedNodePositions: Record<string, SavedNodePosition>;
   selectedNodeId: string | null;
   currentZoneId: string | null;
+  homeZoneId: string | null;
   routePath: string[];
   isConnectionDrawMode: boolean;
   pendingConnectionFromNodeId: string | null;
   connectionModal: PendingConnection | null;
   edgeContextMenu: EdgeContextMenuState | null;
+  nodeContextMenu: NodeContextMenuState | null;
+  viewportCommand: ViewportCommand | null;
+  pendingOcrResult: OcrResult | null;
 
   addNode: (node: CytoNode) => void;
   addRouteNodes: (nodes: CytoNode[]) => void;
   removeNode: (id: string) => void;
   removeNodes: (ids: string[]) => void;
-  pruneIsolatedSniffedNodes: (options: { exceptNodeId: string }) => void;
+  pruneIsolatedNodes: (exceptNodeId?: string) => void;
   setNodes: (nodes: CytoNode[]) => void;
   setSavedNodePositions: (positions: Record<string, SavedNodePosition>) => void;
   upsertSavedNodePosition: (id: string, position: SavedNodePosition) => void;
@@ -72,6 +87,7 @@ interface MapState {
   setEdges: (edges: CytoEdge[]) => void;
   setSelectedNode: (id: string | null) => void;
   setCurrentZone: (id: string | null) => void;
+  setHomeZoneId: (id: string | null) => void;
   setRoutePath: (path: string[]) => void;
   clearRoute: () => void;
   loadConnections: (connections: Connection[]) => void;
@@ -82,6 +98,11 @@ interface MapState {
   closeConnectionModal: () => void;
   openEdgeContextMenu: (menu: EdgeContextMenuState) => void;
   closeEdgeContextMenu: () => void;
+  openNodeContextMenu: (menu: NodeContextMenuState) => void;
+  closeNodeContextMenu: () => void;
+  triggerViewport: (cmd: ViewportCommand) => void;
+  clearViewportCommand: () => void;
+  setPendingOcrResult: (result: OcrResult | null) => void;
 }
 
 export function connectionToEdge(connection: Connection, now = new Date()): CytoEdge {
@@ -138,17 +159,21 @@ export function routePathToVisualEdges(routePath: string[], existingEdges: CytoE
   return visualEdges;
 }
 
-export const useMapStore = create<MapState>((set) => ({
+export const useMapStore = create<MapState>((set, get) => ({
   nodes: [],
   edges: [],
   savedNodePositions: {},
   selectedNodeId: null,
   currentZoneId: null,
+  homeZoneId: null,
   routePath: [],
   isConnectionDrawMode: false,
   pendingConnectionFromNodeId: null,
   connectionModal: null,
   edgeContextMenu: null,
+  nodeContextMenu: null,
+  viewportCommand: null,
+  pendingOcrResult: null,
 
   addNode: (node) =>
     set((s) => {
@@ -235,51 +260,67 @@ export const useMapStore = create<MapState>((set) => ({
             : s.connectionModal,
       };
     }),
-  pruneIsolatedSniffedNodes: ({ exceptNodeId }) =>
-    set((s) => {
-      const connectedNodeIds = new Set<string>();
-      for (const edge of s.edges) {
-        connectedNodeIds.add(edge.source);
-        connectedNodeIds.add(edge.target);
-      }
+  pruneIsolatedNodes: (exceptNodeId?: string) => {
+    const s = get();
+    const connectedNodeIds = new Set<string>();
+    for (const edge of s.edges) {
+      if (edge.isRouteVisual) continue;
+      connectedNodeIds.add(edge.source);
+      connectedNodeIds.add(edge.target);
+    }
 
-      const idsToRemove = s.nodes
-        .filter(
-          (node) =>
-            node.source === "sniffed" &&
-            node.id !== exceptNodeId &&
-            !connectedNodeIds.has(node.id)
-        )
-        .map((node) => node.id);
+    const protected_ = new Set<string>(
+      [s.currentZoneId, s.homeZoneId, exceptNodeId, ...s.routePath].filter(
+        (id): id is string => id != null
+      )
+    );
 
-      if (idsToRemove.length === 0) {
-        return {};
-      }
+    const toRemove = s.nodes.filter(
+      (node) => !connectedNodeIds.has(node.id) && !protected_.has(node.id)
+    );
 
-      const idSet = new Set(idsToRemove);
+    if (toRemove.length === 0) return;
+
+    const manualIdsToRemove = toRemove
+      .filter((node) => node.source === "manual")
+      .map((node) => node.id);
+
+    for (const id of manualIdsToRemove) {
+      fetch(`/api/layout/${id}`, { method: "DELETE" }).catch(() => {
+        /* best-effort */
+      });
+    }
+
+    set((s2) => {
+      const idSet = new Set(toRemove.map((n) => n.id));
       const savedNodePositions = Object.fromEntries(
-        Object.entries(s.savedNodePositions).filter(([id]) => !idSet.has(id))
+        Object.entries(s2.savedNodePositions).filter(([id]) => !idSet.has(id))
       );
       return {
-        nodes: s.nodes.filter((n) => !idSet.has(n.id)),
-        edges: s.edges.filter((e) => !idSet.has(e.source) && !idSet.has(e.target)),
+        nodes: s2.nodes.filter((n) => !idSet.has(n.id)),
+        edges: s2.edges.filter((e) => !idSet.has(e.source) && !idSet.has(e.target)),
         savedNodePositions,
         selectedNodeId:
-          s.selectedNodeId && idSet.has(s.selectedNodeId) ? null : s.selectedNodeId,
+          s2.selectedNodeId && idSet.has(s2.selectedNodeId) ? null : s2.selectedNodeId,
         currentZoneId:
-          s.currentZoneId && idSet.has(s.currentZoneId) ? null : s.currentZoneId,
-        routePath: s.routePath.filter((zoneId) => !idSet.has(zoneId)),
+          s2.currentZoneId && idSet.has(s2.currentZoneId) ? null : s2.currentZoneId,
+        routePath: s2.routePath.filter((zoneId) => !idSet.has(zoneId)),
         pendingConnectionFromNodeId:
-          s.pendingConnectionFromNodeId && idSet.has(s.pendingConnectionFromNodeId)
+          s2.pendingConnectionFromNodeId && idSet.has(s2.pendingConnectionFromNodeId)
             ? null
-            : s.pendingConnectionFromNodeId,
+            : s2.pendingConnectionFromNodeId,
         connectionModal:
-          s.connectionModal &&
-          (idSet.has(s.connectionModal.fromNodeId) || idSet.has(s.connectionModal.toNodeId))
+          s2.connectionModal &&
+          (idSet.has(s2.connectionModal.fromNodeId) || idSet.has(s2.connectionModal.toNodeId))
             ? null
-            : s.connectionModal,
+            : s2.connectionModal,
+        nodeContextMenu:
+          s2.nodeContextMenu && idSet.has(s2.nodeContextMenu.nodeId)
+            ? null
+            : s2.nodeContextMenu,
       };
-    }),
+    });
+  },
   setNodes: (nodes) => set({ nodes }),
   setSavedNodePositions: (positions) => set({ savedNodePositions: positions }),
   upsertSavedNodePosition: (id, position) =>
@@ -304,6 +345,7 @@ export const useMapStore = create<MapState>((set) => ({
   setEdges: (edges) => set({ edges }),
   setSelectedNode: (id) => set({ selectedNodeId: id }),
   setCurrentZone: (id) => set({ currentZoneId: id }),
+  setHomeZoneId: (id) => set({ homeZoneId: id }),
   setRoutePath: (path) => set({ routePath: path }),
   clearRoute: () =>
     set((s) => {
@@ -350,4 +392,9 @@ export const useMapStore = create<MapState>((set) => ({
   closeConnectionModal: () => set({ connectionModal: null }),
   openEdgeContextMenu: (menu) => set({ edgeContextMenu: menu }),
   closeEdgeContextMenu: () => set({ edgeContextMenu: null }),
+  openNodeContextMenu: (menu) => set({ nodeContextMenu: menu }),
+  closeNodeContextMenu: () => set({ nodeContextMenu: null }),
+  triggerViewport: (cmd) => set({ viewportCommand: cmd }),
+  clearViewportCommand: () => set({ viewportCommand: null }),
+  setPendingOcrResult: (result) => set({ pendingOcrResult: result }),
 }));

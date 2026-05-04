@@ -1,4 +1,10 @@
-import type { Connection } from "@ao-mapper/shared";
+import type { Connection, ConnectionType } from "@ao-mapper/shared";
+
+export interface ZoneLookupResult {
+  id: string;
+  uniqueName: string;
+  displayName: string;
+}
 
 export type RealtimeEvent =
   | { type: "connection:created"; connection: Connection }
@@ -11,10 +17,10 @@ export type RealtimeEvent =
       uniqueName: string;
       displayName?: string;
     }
-  | { type: "route:updated" };
-
-export interface ZoneLookupResult {
-  id: string;
-  uniqueName: string;
-  displayName: string;
-}
+  | { type: "route:updated" }
+  | {
+      type: "ocr:result";
+      toZone: ZoneLookupResult;
+      connType: ConnectionType;
+      closesInMinutes: number;
+    };

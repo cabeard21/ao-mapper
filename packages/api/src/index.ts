@@ -8,6 +8,7 @@ import zonesRouter from "./routes/zones";
 import connectionsRouter from "./routes/connections";
 import layoutRouter from "./routes/layout";
 import routeRouter from "./routes/route";
+import settingsRouter from "./routes/settings";
 import { ExpiryService } from "./services/ExpiryService";
 import { ConnectionRepository } from "./repositories/ConnectionRepository";
 import { invalidateRoutesBestEffort } from "./services/invalidateRoutes";
@@ -28,6 +29,7 @@ app.use("/api/zones", zonesRouter);
 app.use("/api/connections", connectionsRouter);
 app.use("/api/layout", layoutRouter);
 app.use("/api/route", routeRouter);
+app.use("/api/settings", settingsRouter);
 
 (async () => {
   try {

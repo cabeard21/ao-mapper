@@ -71,6 +71,10 @@ export const graphStyles: cytoscape.StylesheetStyle[] = [
     style: { "border-color": "#ffd700", "border-width": 3 },
   },
   {
+    selector: "node.home-zone",
+    style: { "border-color": "#ffd700", "border-width": 4, "border-style": "double" },
+  },
+  {
     selector: "edge",
     style: {
       "curve-style": "unbundled-bezier",

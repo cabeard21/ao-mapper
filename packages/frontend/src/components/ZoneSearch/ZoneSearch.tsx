@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import type { Zone } from "@ao-mapper/shared";
 import { useZoneSearch } from "../../hooks/useMapData";
 import { useMapStore } from "../../store/mapStore";
 import { formatZoneType, zoneToNode } from "../zonePresentation";
 
-export function ZoneSearch() {
+interface ZoneSearchProps {
+  placeholder?: string;
+  onSelect?: (zone: Zone) => void;
+}
+
+export function ZoneSearch({ placeholder = "Search zones to add", onSelect }: ZoneSearchProps = {}) {
   const [inputValue, setInputValue] = useState("");
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -31,7 +37,7 @@ export function ZoneSearch() {
           setIsOpen(true);
         }}
         onFocus={() => setIsOpen(true)}
-        placeholder="Search zones to add"
+        placeholder={placeholder}
         style={{
           width: "100%",
           boxSizing: "border-box",
@@ -79,8 +85,12 @@ export function ZoneSearch() {
                   role="option"
                   aria-selected={false}
                   onClick={() => {
-                    addNode(zoneToNode(zone));
-                    setSelectedNode(zone.id);
+                    if (onSelect) {
+                      onSelect(zone);
+                    } else {
+                      addNode(zoneToNode(zone));
+                      setSelectedNode(zone.id);
+                    }
                     setInputValue("");
                     setQuery("");
                     setIsOpen(false);

@@ -1,0 +1,12 @@
+[hotkey]
+key = "f9"
+
+[capture]
+# Offset from mouse cursor (pixels). The tooltip appears above and to the left.
+offset_x = -250
+offset_y = -100
+width = 600
+height = 100
+
+[backend]
+url = "http://localhost:3001"

@@ -11,6 +11,8 @@ import {
 import { AddConnectionModal } from "../AddConnectionModal/AddConnectionModal";
 import { ConnectionToolbar } from "../ConnectionToolbar/ConnectionToolbar";
 import { EdgeContextMenu } from "../EdgeContextMenu/EdgeContextMenu";
+import { NodeContextMenu } from "../NodeContextMenu/NodeContextMenu";
+import { MapControls } from "../MapControls/MapControls";
 import { graphStyles } from "./graphStyles";
 import { readableLayoutOptions, shouldLayoutAfterRouteVisualEdges } from "./graphLayout";
 import { getPrimaryZoneIcon } from "../zonePresentation";
@@ -39,7 +41,9 @@ export function MapGraph() {
   const savedNodePositions = useMapStore((s) => s.savedNodePositions);
   const selectedNodeId = useMapStore((s) => s.selectedNodeId);
   const currentZoneId = useMapStore((s) => s.currentZoneId);
+  const homeZoneId = useMapStore((s) => s.homeZoneId);
   const routePath = useMapStore((s) => s.routePath);
+  const viewportCommand = useMapStore((s) => s.viewportCommand);
   const isConnectionDrawMode = useMapStore((s) => s.isConnectionDrawMode);
   const pendingConnectionFromNodeId = useMapStore(
     (s) => s.pendingConnectionFromNodeId
@@ -49,6 +53,9 @@ export function MapGraph() {
   const upsertSavedNodePosition = useMapStore((s) => s.upsertSavedNodePosition);
   const openEdgeContextMenu = useMapStore((s) => s.openEdgeContextMenu);
   const closeEdgeContextMenu = useMapStore((s) => s.closeEdgeContextMenu);
+  const openNodeContextMenu = useMapStore((s) => s.openNodeContextMenu);
+  const closeNodeContextMenu = useMapStore((s) => s.closeNodeContextMenu);
+  const clearViewportCommand = useMapStore((s) => s.clearViewportCommand);
 
   const persistNodePosition = useCallback((node: cytoscape.NodeSingular) => {
     if (!isNodePositionPersistable(useMapStore.getState().nodes, node.id())) {
@@ -118,6 +125,7 @@ export function MapGraph() {
     cy.on("tap", (evt) => {
       if (evt.target === cy) {
         closeEdgeContextMenu();
+        closeNodeContextMenu();
         setSelectedNode(null);
       }
     });
@@ -127,6 +135,17 @@ export function MapGraph() {
       const rendered = evt.renderedPosition;
       openEdgeContextMenu({
         edgeId: evt.target.id(),
+        x: rendered.x,
+        y: rendered.y,
+      });
+    });
+
+    cy.on("cxttap", "node", (evt) => {
+      evt.preventDefault();
+      closeEdgeContextMenu();
+      const rendered = evt.renderedPosition;
+      openNodeContextMenu({
+        nodeId: evt.target.id(),
         x: rendered.x,
         y: rendered.y,
       });
@@ -143,7 +162,9 @@ export function MapGraph() {
     };
   }, [
     closeEdgeContextMenu,
+    closeNodeContextMenu,
     openEdgeContextMenu,
+    openNodeContextMenu,
     persistNodePosition,
     setSavedNodePositions,
     setSelectedNode,
@@ -263,6 +284,29 @@ export function MapGraph() {
     if (currentZoneId) cy.$id(currentZoneId).addClass("current-zone");
   }, [currentZoneId]);
 
+  // Home zone highlight
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.nodes().removeClass("home-zone");
+    if (homeZoneId) cy.$id(homeZoneId).addClass("home-zone");
+  }, [homeZoneId, nodes]);
+
+  // Viewport commands from MapControls
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || !viewportCommand) return;
+    if (viewportCommand.type === "fit") {
+      cy.fit(undefined, 64);
+    } else if (viewportCommand.type === "center") {
+      const node = cy.$id(viewportCommand.nodeId);
+      if (node.length > 0) {
+        cy.animate({ center: { eles: node }, zoom: 1.0 }, { duration: 300 });
+      }
+    }
+    clearViewportCommand();
+  }, [viewportCommand, clearViewportCommand]);
+
   // Route highlight
   useEffect(() => {
     const cy = cyRef.current;
@@ -323,7 +367,9 @@ export function MapGraph() {
         style={{ width: "100%", height: "100%", background: "#0d0d1a" }}
       />
       <ConnectionToolbar />
+      <MapControls />
       <EdgeContextMenu />
+      <NodeContextMenu />
       <AddConnectionModal />
     </div>
   );

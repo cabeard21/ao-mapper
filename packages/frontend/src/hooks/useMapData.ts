@@ -7,6 +7,10 @@ import { useConnectionRealtime } from "./useConnectionRealtime";
 import { useConnectionTimers } from "./useConnectionTimers";
 import { zoneToNode } from "../components/zonePresentation";
 
+interface UserSettings {
+  homeZoneId: string | null;
+}
+
 export interface PersistedLayoutNode {
   zone: Zone;
   position: SavedNodePosition;
@@ -40,6 +44,34 @@ export function layoutNodesToPositionMap(
   return Object.fromEntries(
     layoutNodes.map((layoutNode) => [layoutNode.zone.id, layoutNode.position])
   );
+}
+
+export function useSettings() {
+  const setHomeZoneId = useMapStore((s) => s.setHomeZoneId);
+  const addRouteNodes = useMapStore((s) => s.addRouteNodes);
+
+  return useQuery<UserSettings>({
+    queryKey: ["settings"],
+    queryFn: async (): Promise<UserSettings> => {
+      const { data } = await axios.get<ApiResponse<UserSettings>>("/api/settings");
+      if (data.success && data.data) {
+        setHomeZoneId(data.data.homeZoneId);
+
+        if (data.data.homeZoneId) {
+          const zoneRes = await axios
+            .get<ApiResponse<Zone>>(`/api/zones/${data.data.homeZoneId}`)
+            .catch(() => null);
+          if (zoneRes?.data.success && zoneRes.data.data) {
+            addRouteNodes([zoneToNode(zoneRes.data.data)]);
+          }
+        }
+
+        return data.data;
+      }
+      return { homeZoneId: null };
+    },
+    staleTime: Infinity,
+  });
 }
 
 export function useConnections() {

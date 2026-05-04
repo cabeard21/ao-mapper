@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { MapGraph } from "./components/MapGraph/MapGraph";
+import { OcrConfirmModal } from "./components/OcrConfirmModal/OcrConfirmModal";
 import { RoutePlanner } from "./components/RoutePlanner/RoutePlanner";
 import { ZoneInfoPanel } from "./components/ZoneInfoPanel/ZoneInfoPanel";
 import { ZoneSearch } from "./components/ZoneSearch/ZoneSearch";
@@ -8,6 +9,7 @@ import {
   useConnections,
   usePersistedLayoutNodes,
   useRemoveZone,
+  useSettings,
 } from "./hooks/useMapData";
 import { useMapStore } from "./store/mapStore";
 
@@ -16,6 +18,7 @@ const queryClient = new QueryClient();
 function MapApp() {
   usePersistedLayoutNodes();
   useConnections();
+  useSettings();
   const selectedNodeId = useMapStore((s) => s.selectedNodeId);
   const removeZone = useRemoveZone();
 
@@ -44,8 +47,10 @@ function MapApp() {
         background: "#0d0d1a",
         color: "#ffffff",
         fontFamily: "sans-serif",
+        position: "relative",
       }}
     >
+      <OcrConfirmModal />
       <header
         style={{
           padding: "8px 16px",

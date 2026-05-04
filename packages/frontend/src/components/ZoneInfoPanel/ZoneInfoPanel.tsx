@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import axios from "axios";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRemoveZone } from "../../hooks/useMapData";
 import { useMapStore } from "../../store/mapStore";
 import { formatZoneType, getResourceIcon } from "../zonePresentation";
@@ -10,13 +12,39 @@ export function formatCityDistance(distance: { hops: number; meters?: number }) 
 }
 
 export function ZoneInfoPanel() {
+  const queryClient = useQueryClient();
   const nodes = useMapStore((s) => s.nodes);
   const selectedNodeId = useMapStore((s) => s.selectedNodeId);
+  const homeZoneId = useMapStore((s) => s.homeZoneId);
+  const setHomeZoneId = useMapStore((s) => s.setHomeZoneId);
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
     [nodes, selectedNodeId]
   );
   const removeZone = useRemoveZone();
+
+  const isHomeZone = selectedNodeId === homeZoneId;
+
+  const handleSetHome = async () => {
+    if (!selectedNodeId) return;
+    try {
+      await axios.put("/api/settings/home-zone", { zoneId: selectedNodeId });
+      setHomeZoneId(selectedNodeId);
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+    } catch {
+      /* best-effort: localhost tool */
+    }
+  };
+
+  const handleClearHome = async () => {
+    try {
+      await axios.delete("/api/settings/home-zone");
+      setHomeZoneId(null);
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+    } catch {
+      /* best-effort */
+    }
+  };
 
   if (!selectedNode) {
     return (
@@ -104,6 +132,22 @@ export function ZoneInfoPanel() {
             <div style={mutedTextStyle}>No city distance data recorded.</div>
           )}
         </section>
+
+        <button
+          type="button"
+          onClick={isHomeZone ? handleClearHome : handleSetHome}
+          style={{
+            border: isHomeZone ? "1px solid #7a6800" : "1px solid #3d3d56",
+            borderRadius: 6,
+            background: isHomeZone ? "#3a3000" : "#1e1e30",
+            color: isHomeZone ? "#ffd700" : "#c8c8e0",
+            cursor: "pointer",
+            fontWeight: 700,
+            padding: "10px 12px",
+          }}
+        >
+          {isHomeZone ? "⌂ Clear home zone" : "⌂ Set as home zone"}
+        </button>
 
         <button
           type="button"

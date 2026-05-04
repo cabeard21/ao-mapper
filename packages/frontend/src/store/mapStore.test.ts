@@ -23,6 +23,7 @@ describe("mapStore zone management", () => {
       savedNodePositions: {},
       selectedNodeId: null,
       currentZoneId: null,
+      homeZoneId: null,
       routePath: [],
     });
   });
@@ -74,58 +75,182 @@ describe("mapStore zone management", () => {
     });
   });
 
-  it("prunes older sniffed nodes without active edges", () => {
-    const currentZone = makeZone("zone-current", "Current Zone");
-    const staleZone = makeZone("zone-stale", "Stale Zone");
-    const connectedZone = makeZone("zone-connected", "Connected Zone");
-    const manualZone = makeZone("zone-manual", "Manual Zone");
+  describe("pruneIsolatedNodes", () => {
+    it("removes sniffed node with no connections when not protected", () => {
+      const staleZone = makeZone("zone-stale", "Stale Zone");
+      const connectedZone = makeZone("zone-connected", "Connected Zone");
+      const anchorZone = makeZone("zone-anchor", "Anchor Zone");
 
-    useMapStore.setState({
-      nodes: [
-        zoneToNode(currentZone, "sniffed"),
-        zoneToNode(staleZone, "sniffed"),
-        zoneToNode(connectedZone, "sniffed"),
-        zoneToNode(manualZone),
-      ],
-      edges: [
-        {
-          id: "edge-1",
-          source: "zone-connected",
-          target: "zone-manual",
-          connType: "PORTAL_7",
-          label: "",
-          durationHours: null,
-          expiresAt: null,
-        },
-      ],
-      selectedNodeId: "zone-stale",
-      currentZoneId: "zone-stale",
-      routePath: ["zone-stale", "zone-connected"],
-      pendingConnectionFromNodeId: "zone-stale",
-      savedNodePositions: {
-        "zone-current": { x: 1, y: 1 },
-        "zone-stale": { x: 2, y: 2 },
-        "zone-connected": { x: 3, y: 3 },
-        "zone-manual": { x: 4, y: 4 },
-      },
+      useMapStore.setState({
+        nodes: [
+          zoneToNode(staleZone, "sniffed"),
+          zoneToNode(connectedZone, "sniffed"),
+          zoneToNode(anchorZone, "sniffed"),
+        ],
+        edges: [
+          {
+            id: "edge-1",
+            source: "zone-connected",
+            target: "zone-anchor",
+            connType: "PORTAL_7",
+            label: "",
+            durationHours: null,
+            expiresAt: null,
+          },
+        ],
+        currentZoneId: "zone-anchor",
+        routePath: [],
+        homeZoneId: null,
+      });
+
+      useMapStore.getState().pruneIsolatedNodes("zone-anchor");
+
+      expect(useMapStore.getState().nodes.map((n) => n.id)).toEqual([
+        "zone-connected",
+        "zone-anchor",
+      ]);
     });
 
-    useMapStore.getState().pruneIsolatedSniffedNodes({ exceptNodeId: "zone-current" });
+    it("removes manual node with no connections", () => {
+      const orphanZone = makeZone("zone-orphan", "Orphan Zone");
+      const connectedZone = makeZone("zone-a", "Zone A");
+      const otherZone = makeZone("zone-b", "Zone B");
 
-    expect(useMapStore.getState().nodes.map((node) => node.id)).toEqual([
-      "zone-current",
-      "zone-connected",
-      "zone-manual",
-    ]);
-    expect(useMapStore.getState().edges).toHaveLength(1);
-    expect(useMapStore.getState().selectedNodeId).toBeNull();
-    expect(useMapStore.getState().currentZoneId).toBeNull();
-    expect(useMapStore.getState().routePath).toEqual(["zone-connected"]);
-    expect(useMapStore.getState().pendingConnectionFromNodeId).toBeNull();
-    expect(useMapStore.getState().savedNodePositions).toEqual({
-      "zone-current": { x: 1, y: 1 },
-      "zone-connected": { x: 3, y: 3 },
-      "zone-manual": { x: 4, y: 4 },
+      useMapStore.setState({
+        nodes: [
+          zoneToNode(orphanZone),
+          zoneToNode(connectedZone),
+          zoneToNode(otherZone, "sniffed"),
+        ],
+        edges: [
+          {
+            id: "edge-ab",
+            source: "zone-a",
+            target: "zone-b",
+            connType: "PORTAL_7",
+            label: "",
+            durationHours: null,
+            expiresAt: null,
+          },
+        ],
+        currentZoneId: null,
+        routePath: [],
+        homeZoneId: null,
+      });
+
+      useMapStore.getState().pruneIsolatedNodes();
+
+      expect(useMapStore.getState().nodes.map((n) => n.id)).toEqual(["zone-a", "zone-b"]);
+    });
+
+    it("skips node in routePath", () => {
+      const routeZone = makeZone("zone-route", "Route Zone");
+
+      useMapStore.setState({
+        nodes: [zoneToNode(routeZone, "route")],
+        edges: [],
+        currentZoneId: null,
+        routePath: ["zone-route"],
+        homeZoneId: null,
+      });
+
+      useMapStore.getState().pruneIsolatedNodes();
+
+      expect(useMapStore.getState().nodes).toHaveLength(1);
+    });
+
+    it("skips currentZoneId node", () => {
+      const currentZone = makeZone("zone-current", "Current Zone");
+
+      useMapStore.setState({
+        nodes: [zoneToNode(currentZone, "sniffed")],
+        edges: [],
+        currentZoneId: "zone-current",
+        routePath: [],
+        homeZoneId: null,
+      });
+
+      useMapStore.getState().pruneIsolatedNodes();
+
+      expect(useMapStore.getState().nodes).toHaveLength(1);
+    });
+
+    it("skips homeZoneId node", () => {
+      const homeZone = makeZone("zone-home", "Home Zone");
+
+      useMapStore.setState({
+        nodes: [zoneToNode(homeZone)],
+        edges: [],
+        currentZoneId: null,
+        routePath: [],
+        homeZoneId: "zone-home",
+      });
+
+      useMapStore.getState().pruneIsolatedNodes();
+
+      expect(useMapStore.getState().nodes).toHaveLength(1);
+    });
+
+    it("skips the explicit exceptNodeId", () => {
+      const exceptZone = makeZone("zone-except", "Except Zone");
+
+      useMapStore.setState({
+        nodes: [zoneToNode(exceptZone, "sniffed")],
+        edges: [],
+        currentZoneId: null,
+        routePath: [],
+        homeZoneId: null,
+      });
+
+      useMapStore.getState().pruneIsolatedNodes("zone-except");
+
+      expect(useMapStore.getState().nodes).toHaveLength(1);
+    });
+
+    it("skips nodes that have at least one real edge", () => {
+      const nodeA = makeZone("zone-a", "Zone A");
+      const nodeB = makeZone("zone-b", "Zone B");
+
+      useMapStore.setState({
+        nodes: [zoneToNode(nodeA), zoneToNode(nodeB)],
+        edges: [
+          {
+            id: "edge-ab",
+            source: "zone-a",
+            target: "zone-b",
+            connType: "PORTAL_7",
+            label: "",
+            durationHours: null,
+            expiresAt: null,
+          },
+        ],
+        currentZoneId: null,
+        routePath: [],
+        homeZoneId: null,
+      });
+
+      useMapStore.getState().pruneIsolatedNodes();
+
+      expect(useMapStore.getState().nodes).toHaveLength(2);
+    });
+
+    it("cleans up stale selected/pending state for pruned nodes", () => {
+      const staleZone = makeZone("zone-stale", "Stale Zone");
+      useMapStore.setState({
+        nodes: [zoneToNode(staleZone, "sniffed")],
+        edges: [],
+        selectedNodeId: "zone-stale",
+        currentZoneId: null,
+        routePath: [],
+        homeZoneId: null,
+        pendingConnectionFromNodeId: "zone-stale",
+      });
+
+      useMapStore.getState().pruneIsolatedNodes();
+
+      expect(useMapStore.getState().nodes).toHaveLength(0);
+      expect(useMapStore.getState().selectedNodeId).toBeNull();
+      expect(useMapStore.getState().pendingConnectionFromNodeId).toBeNull();
     });
   });
 
