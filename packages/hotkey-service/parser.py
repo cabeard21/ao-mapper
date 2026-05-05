@@ -35,10 +35,15 @@ def _extract_zone_name(lines: list[str], text: str) -> str | None:
     # Primary: the zone name is its own line immediately after the "Road of Avalon to" header.
     # OCR often reads 'o' as '0', so match t[o0].
     for i, line in enumerate(lines):
-        if re.search(r"avalon\s+t[o0]", line, re.IGNORECASE) and i + 1 < len(lines):
-            candidate = lines[i + 1].strip()
-            if re.match(r"[A-Z][A-Za-z0-9][A-Za-z0-9\- ]*$", candidate):
-                return candidate
+        if re.search(r"avalon\s+t[o0]", line, re.IGNORECASE):
+            # Skip stray single-character OCR artifacts before the zone name
+            for j in range(i + 1, len(lines)):
+                candidate = lines[j].strip()
+                if len(candidate) <= 1:
+                    continue
+                if re.match(r"[A-Z][A-Za-z0-9][A-Za-z0-9\- ]*$", candidate):
+                    return candidate
+                break
 
     # Fallback: regex on joined text — handles single-line OCR output
     match = re.search(r"\bt[o0]\s+([A-Z][A-Za-z0-9][A-Za-z0-9\- ]+?)(?=\s+\d|\s*$)", text)
@@ -48,11 +53,22 @@ def _extract_zone_name(lines: list[str], text: str) -> str | None:
     return None
 
 
+_VALID_PORTAL_SIZES = [7, 20]
+
+
 def _extract_max_charges(text: str) -> int:
     # Portal size is the max capacity: the number AFTER "/" (e.g. "7/7" → 7, "3/20" → 20)
-    match = re.search(r"\d+\s*/\s*(\d+)", text)
+    # OCR misreads "/" as "." and often prepends extra digits (e.g. "7" → "37", "20" → "20")
+    # Since only 7-man and 20-man portals exist, snap by matching the last digit of the parsed number:
+    # 7 ends in 7, 20 ends in 0 — OCR noise prepends but rarely changes the final digit.
+    match = re.search(r"\d+\s*[/.]\s*(\d+)", text)
     if match:
-        return int(match.group(1))
+        parsed = int(match.group(1))
+        last = parsed % 10
+        for size in _VALID_PORTAL_SIZES:
+            if size % 10 == last:
+                return size
+        return min(_VALID_PORTAL_SIZES, key=lambda s: abs(s - parsed))
     return 7  # default to 7-man if not found
 
 

@@ -27,6 +27,14 @@ class TestExtractZoneName:
         assert result["toZoneName"] == "Seritos-Onaytum"
 
 
+class TestExtractZoneNameOcrArtifacts:
+    def test_skips_single_char_stray_line(self):
+        # OCR sometimes inserts a spurious single char between header and zone name
+        result = parse_tooltip(["Road of Avalon to", "e", "Oetos-Oyexlos", "05.27", "XCloses in 9 h 37 m"])
+        assert result is not None
+        assert result["toZoneName"] == "Oetos-Oyexlos"
+
+
 class TestExtractMaxCharges:
     def test_seven_man(self):
         result = parse_tooltip(["Road of Avalon to SomeZone", "7/7", "Closes in 2 h 0 m"])
@@ -41,6 +49,23 @@ class TestExtractMaxCharges:
     def test_partially_used_portal(self):
         # 3 charges remaining out of max 20
         result = parse_tooltip(["Road of Avalon to SomeZone", "3/20", "Closes in 2 h 0 m"])
+        assert result is not None
+        assert result["charges"] == 20
+
+    def test_slash_misread_as_dot_seven_man(self):
+        # OCR reads "5/7" as "05.27" — extra digit prepended, slash→dot; last digit 7 → 7-man
+        result = parse_tooltip(["Road of Avalon to", "e", "Oetos-Oyexlos", "05.27", "XCloses in 9 h 37 m"])
+        assert result is not None
+        assert result["charges"] == 7
+
+    def test_slash_misread_as_dot_seven_man_variant(self):
+        # OCR reads "4/7" as "04.37"
+        result = parse_tooltip(["Road of Avalon to", "6", "Oetos-Oyexlos", "04.37", "Closesin 9 h 26 m"])
+        assert result is not None
+        assert result["charges"] == 7
+
+    def test_twenty_man_exact(self):
+        result = parse_tooltip(["Road of Avalon to SomeZone", "17/20", "Closes in 2 h 0 m"])
         assert result is not None
         assert result["charges"] == 20
 
