@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import axios from "axios";
 import type { ApiResponse, RouteDirection, RouteResult, Zone } from "@ao-mapper/shared";
@@ -6,9 +6,12 @@ import { useZoneSearch } from "../../hooks/useMapData";
 import { useMapStore } from "../../store/mapStore";
 import { formatZoneType, zoneToNode } from "../zonePresentation";
 import {
+  centeredRouteScrollTop,
   formatRouteCost,
   formatRouteDirection,
+  findPlannerShortcutZone,
   routeHasDirections,
+  swapPlannerZones,
 } from "./routePresentation";
 
 const directionArrow: Record<RouteDirection, string> = {
@@ -22,9 +25,10 @@ interface ZonePickerProps {
   label: string;
   selectedZone: Zone | null;
   onSelect: (zone: Zone) => void;
+  actions?: ReactNode;
 }
 
-function ZonePicker({ label, selectedZone, onSelect }: ZonePickerProps) {
+function ZonePicker({ label, selectedZone, onSelect, actions }: ZonePickerProps) {
   const [inputValue, setInputValue] = useState("");
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -38,8 +42,11 @@ function ZonePicker({ label, selectedZone, onSelect }: ZonePickerProps) {
   const shouldShowResults = isOpen && inputValue.trim().length >= 2;
 
   return (
-    <label style={{ display: "grid", gap: 6, minWidth: 0, position: "relative" }}>
-      <span style={fieldLabelStyle}>{label}</span>
+    <div style={{ display: "grid", gap: 6, minWidth: 0, position: "relative" }}>
+      <span style={fieldHeaderStyle}>
+        <span style={fieldLabelStyle}>{label}</span>
+        {actions ? <span style={shortcutRowStyle}>{actions}</span> : null}
+      </span>
       <input
         aria-label={`${label} zone`}
         value={inputValue}
@@ -85,7 +92,7 @@ function ZonePicker({ label, selectedZone, onSelect }: ZonePickerProps) {
           )}
         </div>
       ) : null}
-    </label>
+    </div>
   );
 }
 
@@ -114,6 +121,10 @@ function DirectionChip({
 export function RoutePlanner() {
   const [fromZone, setFromZone] = useState<Zone | null>(null);
   const [toZone, setToZone] = useState<Zone | null>(null);
+  const [activeRoute, setActiveRoute] = useState<RouteResult | null>(null);
+  const nodes = useMapStore((s) => s.nodes);
+  const currentZoneId = useMapStore((s) => s.currentZoneId);
+  const homeZoneId = useMapStore((s) => s.homeZoneId);
   const addRouteNodes = useMapStore((s) => s.addRouteNodes);
   const clearRoute = useMapStore((s) => s.clearRoute);
   const setRoutePath = useMapStore((s) => s.setRoutePath);
@@ -135,11 +146,84 @@ export function RoutePlanner() {
       clearRoute();
       setRoutePath(route.path ?? []);
       addRouteNodes(route.steps.map((step) => zoneToNode(step.zone, "route")));
+      setActiveRoute(route);
     },
   });
 
-  const route = routeMutation.data;
+  const nearestCityMutation = useMutation({
+    mutationFn: async () => {
+      const fromId = fromZone?.id ?? currentZoneId;
+      if (!fromId) throw new Error("No from zone");
+      const { data } = await axios.get<ApiResponse<RouteResult>>("/api/route/nearest-city", {
+        params: { from: fromId },
+      });
+      if (!data.success || !data.data) {
+        throw new Error(data.error ?? "Nearest city search failed");
+      }
+      return data.data;
+    },
+    onSuccess: (route) => {
+      const cityZone = route.steps.at(-1)?.zone ?? null;
+      const firstZone = route.steps.at(0)?.zone ?? null;
+      if (cityZone) setToZone(cityZone);
+      if (!fromZone && firstZone) setFromZone(firstZone);
+      clearRoute();
+      setRoutePath(route.path ?? []);
+      addRouteNodes(route.steps.map((step) => zoneToNode(step.zone, "route")));
+      setActiveRoute(route);
+    },
+  });
+
+  const currentShortcutZone = useMemo(
+    () => findPlannerShortcutZone(nodes, currentZoneId),
+    [currentZoneId, nodes]
+  );
+  const homeShortcutZone = useMemo(
+    () => findPlannerShortcutZone(nodes, homeZoneId),
+    [homeZoneId, nodes]
+  );
+
+  const setPlannerFromZone = (zone: Zone) => {
+    setFromZone(zone);
+    setActiveRoute(null);
+    routeMutation.reset();
+    nearestCityMutation.reset();
+  };
+
+  const setPlannerToZone = (zone: Zone) => {
+    setToZone(zone);
+    setActiveRoute(null);
+    routeMutation.reset();
+    nearestCityMutation.reset();
+  };
+
+  const handleSwapZones = () => {
+    const swapped = swapPlannerZones(fromZone, toZone);
+    setFromZone(swapped.fromZone);
+    setToZone(swapped.toZone);
+    setActiveRoute(null);
+    routeMutation.reset();
+    nearestCityMutation.reset();
+  };
+
+  const canNearestCity = Boolean(fromZone?.id ?? currentZoneId);
+
+  const summaryRef = useRef<HTMLDivElement>(null);
+  const stepRefs = useRef<Map<string, HTMLLIElement>>(new Map());
+
+  useEffect(() => {
+    if (!currentZoneId || !activeRoute?.path) return;
+    const summaryEl = summaryRef.current;
+    const el = stepRefs.current.get(currentZoneId);
+    if (!summaryEl || !el) return;
+    summaryEl.scrollTo({
+      top: centeredRouteScrollTop(summaryEl, el),
+      behavior: "smooth",
+    });
+  }, [currentZoneId, activeRoute]);
+
   const canSearch = Boolean(fromZone && toZone && fromZone.id !== toZone.id);
+  const canSwap = Boolean(fromZone || toZone);
   const selectedLabel = useMemo(() => {
     if (!fromZone || !toZone) {
       return "Route Planner";
@@ -156,11 +240,97 @@ export function RoutePlanner() {
         </div>
 
         <div style={pickerGridStyle}>
-          <ZonePicker label="From" selectedZone={fromZone} onSelect={setFromZone} />
-          <ZonePicker label="To" selectedZone={toZone} onSelect={setToZone} />
+          <ZonePicker
+            label="From"
+            selectedZone={fromZone}
+            onSelect={setPlannerFromZone}
+            actions={
+              <>
+                <button
+                  type="button"
+                  title="Use home zone as From"
+                  disabled={!homeShortcutZone}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    if (homeShortcutZone) setPlannerFromZone(homeShortcutZone);
+                  }}
+                  style={homeShortcutZone ? shortcutButtonStyle : disabledShortcutButtonStyle}
+                >
+                  Home
+                </button>
+                <button
+                  type="button"
+                  title="Use current zone as From"
+                  disabled={!currentShortcutZone}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    if (currentShortcutZone) setPlannerFromZone(currentShortcutZone);
+                  }}
+                  style={currentShortcutZone ? shortcutButtonStyle : disabledShortcutButtonStyle}
+                >
+                  Current
+                </button>
+              </>
+            }
+          />
+          <ZonePicker
+            label="To"
+            selectedZone={toZone}
+            onSelect={setPlannerToZone}
+            actions={
+              <>
+                <button
+                  type="button"
+                  title="Use home zone as To"
+                  disabled={!homeShortcutZone}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    if (homeShortcutZone) setPlannerToZone(homeShortcutZone);
+                  }}
+                  style={homeShortcutZone ? shortcutButtonStyle : disabledShortcutButtonStyle}
+                >
+                  Home
+                </button>
+                <button
+                  type="button"
+                  title="Use current zone as To"
+                  disabled={!currentShortcutZone}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    if (currentShortcutZone) setPlannerToZone(currentShortcutZone);
+                  }}
+                  style={currentShortcutZone ? shortcutButtonStyle : disabledShortcutButtonStyle}
+                >
+                  Current
+                </button>
+                <button
+                  type="button"
+                  title="Find nearest city from current From zone"
+                  disabled={!canNearestCity || nearestCityMutation.isPending}
+                  onClick={() => nearestCityMutation.mutate()}
+                  style={canNearestCity && !nearestCityMutation.isPending ? shortcutButtonStyle : disabledShortcutButtonStyle}
+                >
+                  {nearestCityMutation.isPending ? "..." : "City"}
+                </button>
+              </>
+            }
+          />
         </div>
 
         <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            title="Swap From and To"
+            disabled={!canSwap}
+            onClick={handleSwapZones}
+            style={{
+              ...secondaryButtonStyle,
+              opacity: canSwap ? 1 : 0.55,
+              cursor: canSwap ? "pointer" : "default",
+            }}
+          >
+            Swap
+          </button>
           <button
             type="button"
             disabled={!canSearch || routeMutation.isPending}
@@ -178,8 +348,10 @@ export function RoutePlanner() {
             onClick={() => {
               setFromZone(null);
               setToZone(null);
+              setActiveRoute(null);
               clearRoute();
               routeMutation.reset();
+              nearestCityMutation.reset();
             }}
             style={secondaryButtonStyle}
           >
@@ -191,27 +363,35 @@ export function RoutePlanner() {
           <div style={mutedStateStyle}>Choose two different zones.</div>
         ) : null}
 
-        {routeMutation.isError ? (
+        {routeMutation.isError || nearestCityMutation.isError ? (
           <div style={errorStateStyle}>
-            {routeMutation.error instanceof Error
-              ? routeMutation.error.message
-              : "Route search failed"}
+            {(() => {
+              const err = routeMutation.error ?? nearestCityMutation.error;
+              return err instanceof Error ? err.message : "Route search failed";
+            })()}
           </div>
         ) : null}
 
-        {route && route.path === null ? (
+        {activeRoute && activeRoute.path === null ? (
           <div style={mutedStateStyle}>No route found with current known routes.</div>
         ) : null}
 
-        {route && route.path ? (
-          <div style={summaryStyle}>
+        {activeRoute && activeRoute.path ? (
+          <div ref={summaryRef} style={summaryStyle}>
             <div style={summaryHeaderStyle}>
               <span>Fastest route</span>
-              <span style={{ color: "#f7d77a" }}>{formatRouteCost(route)}</span>
+              <span style={{ color: "#f7d77a" }}>{formatRouteCost(activeRoute)}</span>
             </div>
             <ol style={stepListStyle}>
-              {route.steps.map((step, index) => (
-                <li key={`${step.zone.id}-${index}`} style={stepStyle}>
+              {activeRoute.steps.map((step, index) => (
+                <li
+                  key={`${step.zone.id}-${index}`}
+                  ref={(el) => {
+                    if (el) stepRefs.current.set(step.zone.id, el);
+                    else stepRefs.current.delete(step.zone.id);
+                  }}
+                  style={stepStyle}
+                >
                   <span style={stepNumberStyle}>{index + 1}</span>
                   <span style={{ minWidth: 0 }}>
                     <span style={zoneNameStyle}>{step.zone.displayName}</span>
@@ -268,11 +448,27 @@ const pickerGridStyle = {
   gap: 8,
 };
 
+const fieldHeaderStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 8,
+  minWidth: 0,
+};
+
 const fieldLabelStyle = {
   color: "#cfcfe3",
   fontSize: 11,
   fontWeight: 800,
   textTransform: "uppercase" as const,
+};
+
+const shortcutRowStyle = {
+  display: "flex",
+  flexWrap: "wrap" as const,
+  justifyContent: "flex-end",
+  gap: 4,
+  minWidth: 0,
 };
 
 const inputStyle = {
@@ -353,6 +549,24 @@ const secondaryButtonStyle = {
   fontSize: 13,
   fontWeight: 700,
   padding: "9px 10px",
+};
+
+const shortcutButtonStyle = {
+  border: "1px solid #343448",
+  borderRadius: 5,
+  background: "#18182a",
+  color: "#dfdff0",
+  cursor: "pointer",
+  fontSize: 10,
+  fontWeight: 800,
+  lineHeight: 1,
+  padding: "5px 6px",
+};
+
+const disabledShortcutButtonStyle = {
+  ...shortcutButtonStyle,
+  opacity: 0.45,
+  cursor: "default",
 };
 
 const mutedStateStyle = {

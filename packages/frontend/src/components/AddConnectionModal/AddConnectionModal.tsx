@@ -43,15 +43,19 @@ export function AddConnectionModal() {
   const fromNode = nodes.find((node) => node.id === modal?.fromNodeId);
   const toNode = nodes.find((node) => node.id === modal?.toNodeId);
 
+  const edgeConnType =
+    editingEdge?.connType !== "STATIC" ? editingEdge?.connType : undefined;
+
   const [connType, setConnType] = useState<ConnectionType>(
-    editingEdge?.connType ?? "PORTAL_7"
+    edgeConnType ?? "PORTAL_7"
   );
   const [durationHours, setDurationHours] = useState<string>(
     getInitialDuration(editingEdge?.durationHours)
   );
 
   useEffect(() => {
-    setConnType(editingEdge?.connType ?? "PORTAL_7");
+    const ct = editingEdge?.connType;
+    setConnType(ct !== "STATIC" && ct !== undefined ? ct : "PORTAL_7");
     setDurationHours(getInitialDuration(editingEdge?.durationHours));
   }, [editingEdge?.connType, editingEdge?.durationHours, modal?.edgeId]);
 
