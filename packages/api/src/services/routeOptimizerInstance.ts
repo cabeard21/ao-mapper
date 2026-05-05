@@ -7,7 +7,7 @@ import { createRouteCache } from "./routeCache";
 
 const connectionRepo = new ConnectionRepository(pool);
 const staticRoadRepo = new StaticRoadRepository(pool);
-const zoneRepo = new ZoneRepository(pool);
+export const zoneRepo = new ZoneRepository(pool);
 
 export const routeOptimizer = new RouteOptimizer({
   findActiveConnections: () => connectionRepo.findActive(),

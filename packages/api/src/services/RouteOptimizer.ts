@@ -336,7 +336,9 @@ export class RouteOptimizer {
         }
       : { path: null, hops: null, cost: null, steps: [] };
 
-    await this.dataSource.cache?.set(cacheKey, result);
+    if (result.path !== null) {
+      await this.dataSource.cache?.set(cacheKey, result);
+    }
     return result;
   }
 

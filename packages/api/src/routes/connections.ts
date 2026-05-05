@@ -2,11 +2,13 @@ import { Router, Request, Response } from "express";
 import { z, ZodError } from "zod";
 import { pool } from "../db";
 import { ConnectionRepository } from "../repositories/ConnectionRepository";
+import { StaticRoadRepository } from "../repositories/StaticRoadRepository";
 import { invalidateRoutesBestEffort } from "../services/invalidateRoutes";
 import { broadcastRealtimeEvent } from "../ws/realtime";
 
 const router: ReturnType<typeof Router> = Router();
 const repo = new ConnectionRepository(pool);
+const staticRoadRepo = new StaticRoadRepository(pool);
 
 const connTypeEnum = z.enum(["PORTAL_7", "PORTAL_20"]);
 
@@ -31,6 +33,17 @@ router.get("/", async (_req: Request, res: Response) => {
     res.json({ success: true, data });
   } catch (err) {
     console.error("[connections] findActive failed:", err);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
+
+router.get("/static", async (_req: Request, res: Response) => {
+  try {
+    const edges = await staticRoadRepo.findEdges();
+    const data = edges.map((e) => ({ fromZoneId: e.fromZoneId, toZoneId: e.toZoneId }));
+    res.json({ success: true, data, error: null });
+  } catch (err) {
+    console.error("[connections] static failed:", err);
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });

@@ -1,7 +1,17 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { ApiResponse, CityDistance, RouteResult } from "@ao-mapper/shared";
-import { routeOptimizer } from "../services/routeOptimizerInstance";
+import { routeOptimizer, zoneRepo } from "../services/routeOptimizerInstance";
+
+const KNOWN_CITY_NAMES = [
+  "Bridgewatch",
+  "Caerleon",
+  "Fort Sterling",
+  "Lymhurst",
+  "Martlock",
+  "Thetford",
+  "Brecilien",
+];
 
 const router: ReturnType<typeof Router> = Router();
 
@@ -45,6 +55,50 @@ router.get("/", async (req: Request, res: Response) => {
     return res.json(body);
   } catch (error) {
     console.error("[route] findRoute failed:", error);
+    const body: ApiResponse<null> = {
+      success: false,
+      data: null,
+      error: "Internal server error",
+    };
+    return res.status(500).json(body);
+  }
+});
+
+router.get("/nearest-city", async (req: Request, res: Response) => {
+  const parsed = cityQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    const body: ApiResponse<null> = {
+      success: false,
+      data: null,
+      error: errorMessage(parsed.error),
+    };
+    return res.status(400).json(body);
+  }
+
+  try {
+    const results: RouteResult[] = [];
+    for (const name of KNOWN_CITY_NAMES) {
+      const candidates = await zoneRepo.search(name, 5);
+      for (const cityZone of candidates) {
+        const result = await routeOptimizer.findRoute(parsed.data.from, cityZone.id);
+        if (result.path !== null) {
+          results.push(result);
+          break;
+        }
+      }
+    }
+
+    const best =
+      results.length === 0
+        ? { path: null, steps: [], hops: 0, cost: 0 }
+        : results.reduce((a, b) =>
+            (a.cost ?? Number.POSITIVE_INFINITY) <= (b.cost ?? Number.POSITIVE_INFINITY) ? a : b
+          );
+
+    const body: ApiResponse<RouteResult> = { success: true, data: best, error: null };
+    return res.json(body);
+  } catch (error) {
+    console.error("[route] nearest-city failed:", error);
     const body: ApiResponse<null> = {
       success: false,
       data: null,

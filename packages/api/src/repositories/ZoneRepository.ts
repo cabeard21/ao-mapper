@@ -151,4 +151,5 @@ export class ZoneRepository {
     const result = await this.pool.query<ZoneRow>(sql, [`%${q}%`, limit]);
     return result.rows.map(rowToZone);
   }
+
 }
