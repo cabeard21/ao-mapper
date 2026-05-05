@@ -105,6 +105,18 @@ export const graphStyles: cytoscape.StylesheetStyle[] = [
     },
   },
   {
+    selector: 'edge[connType="STATIC"]',
+    style: {
+      "line-color": "#555566",
+      "target-arrow-color": "#555566",
+      width: 1.5,
+      "line-style": "dashed",
+      "line-dash-pattern": [6, 4],
+      opacity: 0.6,
+      label: "",
+    },
+  },
+  {
     selector: "edge.timed",
     style: { "line-style": "dashed" },
   },

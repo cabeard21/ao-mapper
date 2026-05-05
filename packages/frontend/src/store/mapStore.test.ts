@@ -25,6 +25,7 @@ describe("mapStore zone management", () => {
       currentZoneId: null,
       homeZoneId: null,
       routePath: [],
+      isFollowingCurrentZone: false,
     });
   });
 
@@ -35,6 +36,18 @@ describe("mapStore zone management", () => {
 
     expect(useMapStore.getState().nodes).toHaveLength(1);
     expect(useMapStore.getState().selectedNodeId).toBe("zone-1");
+  });
+
+  it("toggles current-zone follow mode", () => {
+    expect(useMapStore.getState().isFollowingCurrentZone).toBe(false);
+
+    useMapStore.getState().setFollowingCurrentZone(true);
+
+    expect(useMapStore.getState().isFollowingCurrentZone).toBe(true);
+
+    useMapStore.getState().setFollowingCurrentZone(false);
+
+    expect(useMapStore.getState().isFollowingCurrentZone).toBe(false);
   });
 
   it("removes a zone with connected edges and stale route references", () => {

@@ -23,7 +23,7 @@ export interface CytoEdge {
   id: string;
   source: string;
   target: string;
-  connType: ConnectionType;
+  connType: ConnectionType | "STATIC";
   label: string;
   durationHours: number | null;
   expiresAt: string | null;
@@ -60,10 +60,12 @@ export type ViewportCommand =
 interface MapState {
   nodes: CytoNode[];
   edges: CytoEdge[];
+  staticEdges: CytoEdge[];
   savedNodePositions: Record<string, SavedNodePosition>;
   selectedNodeId: string | null;
   currentZoneId: string | null;
   homeZoneId: string | null;
+  isFollowingCurrentZone: boolean;
   routePath: string[];
   isConnectionDrawMode: boolean;
   pendingConnectionFromNodeId: string | null;
@@ -81,6 +83,7 @@ interface MapState {
   setNodes: (nodes: CytoNode[]) => void;
   setSavedNodePositions: (positions: Record<string, SavedNodePosition>) => void;
   upsertSavedNodePosition: (id: string, position: SavedNodePosition) => void;
+  setStaticEdges: (edges: CytoEdge[]) => void;
   addEdge: (edge: CytoEdge) => void;
   upsertEdge: (edge: CytoEdge) => void;
   removeEdge: (id: string) => void;
@@ -88,6 +91,7 @@ interface MapState {
   setSelectedNode: (id: string | null) => void;
   setCurrentZone: (id: string | null) => void;
   setHomeZoneId: (id: string | null) => void;
+  setFollowingCurrentZone: (enabled: boolean) => void;
   setRoutePath: (path: string[]) => void;
   clearRoute: () => void;
   loadConnections: (connections: Connection[]) => void;
@@ -162,10 +166,12 @@ export function routePathToVisualEdges(routePath: string[], existingEdges: CytoE
 export const useMapStore = create<MapState>((set, get) => ({
   nodes: [],
   edges: [],
+  staticEdges: [],
   savedNodePositions: {},
   selectedNodeId: null,
   currentZoneId: null,
   homeZoneId: null,
+  isFollowingCurrentZone: false,
   routePath: [],
   isConnectionDrawMode: false,
   pendingConnectionFromNodeId: null,
@@ -330,6 +336,7 @@ export const useMapStore = create<MapState>((set, get) => ({
         [id]: position,
       },
     })),
+  setStaticEdges: (edges) => set({ staticEdges: edges }),
   addEdge: (edge) => set((s) => ({ edges: [...s.edges, edge] })),
   upsertEdge: (edge) =>
     set((s) => {
@@ -346,6 +353,7 @@ export const useMapStore = create<MapState>((set, get) => ({
   setSelectedNode: (id) => set({ selectedNodeId: id }),
   setCurrentZone: (id) => set({ currentZoneId: id }),
   setHomeZoneId: (id) => set({ homeZoneId: id }),
+  setFollowingCurrentZone: (enabled) => set({ isFollowingCurrentZone: enabled }),
   setRoutePath: (path) => set({ routePath: path }),
   clearRoute: () =>
     set((s) => {
@@ -370,10 +378,11 @@ export const useMapStore = create<MapState>((set, get) => ({
   },
   refreshEdgeLabels: (now = new Date()) =>
     set((s) => ({
-      edges: s.edges.map((edge) => ({
-        ...edge,
-        label: formatConnectionLabel(edge, now),
-      })),
+      edges: s.edges.map((edge) => {
+        const { connType, durationHours, expiresAt } = edge;
+        if (connType === "STATIC") return edge;
+        return { ...edge, label: formatConnectionLabel({ connType, durationHours, expiresAt }, now) };
+      }),
     })),
   setConnectionDrawMode: (enabled) =>
     set({

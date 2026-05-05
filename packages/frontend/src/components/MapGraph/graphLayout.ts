@@ -21,3 +21,15 @@ export const readableLayoutOptions = {
 export function shouldLayoutAfterRouteVisualEdges(routeVisualEdgeCount: number): boolean {
   return routeVisualEdgeCount > 0;
 }
+
+export function layoutOptionsForViewportMode(
+  preserveViewport: boolean
+): cytoscape.LayoutOptions {
+  if (!preserveViewport) {
+    return readableLayoutOptions;
+  }
+  return {
+    ...readableLayoutOptions,
+    fit: false,
+  } as cytoscape.LayoutOptions;
+}

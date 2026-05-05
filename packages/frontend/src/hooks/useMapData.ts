@@ -5,6 +5,7 @@ import { useMapStore } from "../store/mapStore";
 import type { SavedNodePosition } from "../store/mapStore";
 import { useConnectionRealtime } from "./useConnectionRealtime";
 import { useConnectionTimers } from "./useConnectionTimers";
+import { useStaticEdgeSync } from "./useStaticEdgeSync";
 import { zoneToNode } from "../components/zonePresentation";
 
 interface UserSettings {
@@ -79,6 +80,7 @@ export function useConnections() {
   const addRouteNodes = useMapStore((s) => s.addRouteNodes);
   useConnectionRealtime();
   useConnectionTimers();
+  useStaticEdgeSync();
 
   return useQuery<Connection[]>({
     queryKey: ["connections"],

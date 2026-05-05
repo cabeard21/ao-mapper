@@ -5,7 +5,9 @@ export function MapControls() {
   const nodes = useMapStore((s) => s.nodes);
   const currentZoneId = useMapStore((s) => s.currentZoneId);
   const homeZoneId = useMapStore((s) => s.homeZoneId);
+  const isFollowingCurrentZone = useMapStore((s) => s.isFollowingCurrentZone);
   const triggerViewport = useMapStore((s) => s.triggerViewport);
+  const setFollowingCurrentZone = useMapStore((s) => s.setFollowingCurrentZone);
   const pruneIsolatedNodes = useMapStore((s) => s.pruneIsolatedNodes);
 
   const homeNodeOnMap = homeZoneId != null && nodes.some((n) => n.id === homeZoneId);
@@ -15,10 +17,24 @@ export function MapControls() {
     <div style={toolbarStyle}>
       <button
         type="button"
-        title="Go to current zone"
+        title={isFollowingCurrentZone ? "Stop following current zone" : "Follow current zone"}
         disabled={currentZoneId == null}
-        onClick={() => currentZoneId && triggerViewport({ type: "center", nodeId: currentZoneId })}
-        style={currentZoneId != null ? buttonStyle : disabledButtonStyle}
+        aria-pressed={isFollowingCurrentZone}
+        onClick={() => {
+          if (!currentZoneId) return;
+          const next = !isFollowingCurrentZone;
+          setFollowingCurrentZone(next);
+          if (next) {
+            triggerViewport({ type: "center", nodeId: currentZoneId });
+          }
+        }}
+        style={
+          currentZoneId == null
+            ? disabledButtonStyle
+            : isFollowingCurrentZone
+              ? activeButtonStyle
+              : buttonStyle
+        }
       >
         ⊕
       </button>
@@ -80,4 +96,11 @@ const disabledButtonStyle = {
   ...buttonStyle,
   opacity: 0.4,
   cursor: "default",
+} satisfies CSSProperties;
+
+const activeButtonStyle = {
+  ...buttonStyle,
+  border: "1px solid #c49424",
+  background: "#2d2514",
+  color: "#f7d77a",
 } satisfies CSSProperties;
