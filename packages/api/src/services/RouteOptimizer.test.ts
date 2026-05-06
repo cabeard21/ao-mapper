@@ -201,12 +201,49 @@ describe("RouteOptimizer", () => {
       steps: [
         { zone: zoneA, enterDirection: null, exitDirection: "NE" },
         { zone: roadsZone, enterDirection: null, exitDirection: null },
-        { zone: zoneB, enterDirection: "SW", exitDirection: null },
+        { zone: zoneB, enterDirection: null, exitDirection: null },
       ],
     });
   });
 
-  it("uses world-map travel direction when AFM world positions are available", async () => {
+  it("uses static edge exit positions before world-map travel direction", async () => {
+    const drywater = zone("drywater", "Drywater Meadow", [], "yellow", {
+      afm: {
+        id: "afm-drywater",
+        minimapBoundsMin: [-415, -415],
+        minimapBoundsMax: [415, 415],
+        worldmapposition: [46.44, -391.8],
+      },
+    });
+    const longmarch = zone("longmarch", "Longmarch Meadow", [], "yellow", {
+      afm: {
+        id: "afm-longmarch",
+        minimapBoundsMin: [-415, -415],
+        minimapBoundsMax: [415, 415],
+        worldmapposition: [26.21, -387.5],
+      },
+    });
+    const optimizer = new RouteOptimizer({
+      findActiveConnections: async () => [],
+      findStaticEdges: async () => [
+        {
+          fromZoneId: "drywater",
+          toZoneId: "longmarch",
+          fromPosition: [-160.5, -378.5],
+        },
+      ],
+      findZoneById: zonesById([drywater, longmarch]),
+    });
+
+    await expect(optimizer.findRoute("drywater", "longmarch")).resolves.toMatchObject({
+      steps: [
+        { zone: drywater, enterDirection: null, exitDirection: "NW" },
+        { zone: longmarch, enterDirection: "SE", exitDirection: null },
+      ],
+    });
+  });
+
+  it("uses world-map travel direction when no exit position is available", async () => {
     const riverbed = zone("riverbed", "Drybasin Riverbed", [], "black", {
       afm: {
         id: "afm-riverbed",
@@ -229,8 +266,6 @@ describe("RouteOptimizer", () => {
         {
           fromZoneId: "riverbed",
           toZoneId: "oasis",
-          fromPosition: [229.5, -378.5],
-          toPosition: [40.5, 378.5],
         },
       ],
       findZoneById: zonesById([riverbed, oasis]),
@@ -281,7 +316,7 @@ describe("RouteOptimizer", () => {
     await optimizer.invalidateRoutes();
 
     expect(findActiveConnections).toHaveBeenCalledTimes(1);
-    expect(cache.set).toHaveBeenCalledWith("route:v4:a:b", {
+    expect(cache.set).toHaveBeenCalledWith("route:v5:a:b", {
       path: ["a", "b"],
       hops: 1,
       cost: 1,

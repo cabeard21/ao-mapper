@@ -108,6 +108,48 @@ router.get("/nearest-city", async (req: Request, res: Response) => {
   }
 });
 
+router.get("/nearest-red", async (req: Request, res: Response) => {
+  const parsed = cityQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    const body: ApiResponse<null> = {
+      success: false,
+      data: null,
+      error: errorMessage(parsed.error),
+    };
+    return res.status(400).json(body);
+  }
+
+  try {
+    const redZones = await zoneRepo.findAll({ type: "red", limit: 100 });
+
+    const results: RouteResult[] = [];
+    for (const zone of redZones) {
+      const result = await routeOptimizer.findRoute(parsed.data.from, zone.id);
+      if (result.path !== null) {
+        results.push(result);
+      }
+    }
+
+    const best =
+      results.length === 0
+        ? { path: null, steps: [], hops: 0, cost: 0 }
+        : results.reduce((a, b) =>
+            (a.cost ?? Number.POSITIVE_INFINITY) <= (b.cost ?? Number.POSITIVE_INFINITY) ? a : b
+          );
+
+    const body: ApiResponse<RouteResult> = { success: true, data: best, error: null };
+    return res.json(body);
+  } catch (error) {
+    console.error("[route] nearest-red failed:", error);
+    const body: ApiResponse<null> = {
+      success: false,
+      data: null,
+      error: "Internal server error",
+    };
+    return res.status(500).json(body);
+  }
+});
+
 router.get("/to-city", async (req: Request, res: Response) => {
   const parsed = cityQuerySchema.safeParse(req.query);
   if (!parsed.success) {

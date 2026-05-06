@@ -222,7 +222,8 @@ export class StaticRoadRepository {
     const result = await this.pool.query<ZoneIdRow>(
       `SELECT id, unique_name, display_name
        FROM zones
-       WHERE unique_name = ANY($1::text[]) OR display_name = ANY($1::text[])`,
+       WHERE (unique_name = ANY($1::text[]) OR display_name = ANY($1::text[]))
+         AND display_name NOT LIKE 'DNG%'`,
       [lookupKeys]
     );
     const displayCounts = new Map<string, number>();

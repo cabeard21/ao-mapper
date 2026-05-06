@@ -66,7 +66,7 @@ interface AfmMetadata {
 }
 
 const routeCacheKey = (fromZoneId: string, toZoneId: string): string =>
-  `route:v4:${fromZoneId}:${toZoneId}`;
+  `route:v5:${fromZoneId}:${toZoneId}`;
 
 function isPoint(value: unknown): value is Point {
   return (
@@ -270,9 +270,23 @@ function edgePositionForZone(
     return edge.fromPosition ?? (neighbor ? afmPositionForNeighbor(zone, neighbor) : undefined);
   }
   if (edge.toZoneId === zoneId) {
-    return edge.toPosition ?? (neighbor ? afmPositionForNeighbor(zone, neighbor) : undefined);
+    // toPosition is in screen-coords; for enter direction, fall through to travelDirectionBetweenZones
+    // which uses worldmapposition (game-coords) and gives the correct N/S result.
+    return undefined;
   }
   return undefined;
+}
+
+function routeDirectionForStep(
+  zone: Zone,
+  edge: GraphEdge | undefined,
+  zoneId: string,
+  neighbor: Zone | undefined
+): RouteDirection | null {
+  return (
+    directionFromPosition(zone, edgePositionForZone(edge, zoneId, zone, neighbor)) ??
+    travelDirectionBetweenZones(zone, neighbor)
+  );
 }
 
 async function buildSteps(
@@ -294,18 +308,8 @@ async function buildSteps(
 
     return {
       zone,
-      enterDirection:
-        travelDirectionBetweenZones(zone, previousZone) ??
-        directionFromPosition(
-          zone,
-          edgePositionForZone(previousEdge, zoneId, zone, previousZone)
-        ),
-      exitDirection:
-        travelDirectionBetweenZones(zone, nextZone) ??
-        directionFromPosition(
-          zone,
-          edgePositionForZone(nextEdge, zoneId, zone, nextZone)
-        ),
+      enterDirection: routeDirectionForStep(zone, previousEdge, zoneId, previousZone),
+      exitDirection: routeDirectionForStep(zone, nextEdge, zoneId, nextZone),
       sourceFromPrevious: previousEdge?.source ?? null,
       sourceToNext: nextEdge?.source ?? null,
     };

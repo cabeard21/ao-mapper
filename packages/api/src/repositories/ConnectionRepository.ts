@@ -46,9 +46,14 @@ export class ConnectionRepository {
 
   async findActive(): Promise<Connection[]> {
     const result = await this.pool.query<ConnectionRow>(
-      `SELECT * FROM connections
-       WHERE expires_at IS NULL OR expires_at > now()
-       ORDER BY created_at DESC`
+      `SELECT c.*
+       FROM connections c
+       JOIN zones fz ON fz.id = c.from_zone_id
+       JOIN zones tz ON tz.id = c.to_zone_id
+       WHERE (c.expires_at IS NULL OR c.expires_at > now())
+         AND fz.display_name NOT LIKE 'DNG%'
+         AND tz.display_name NOT LIKE 'DNG%'
+       ORDER BY c.created_at DESC`
     );
     return result.rows.map(mapRow);
   }
