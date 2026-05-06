@@ -124,7 +124,7 @@ function clusterPvpTypeToZoneType(pvpType: string, tier: number): ZoneType {
   if (pvpType === 'AVA') return 'roads'
   if (pvpType === 'ROY') {
     if (tier <= 4) return 'blue'
-    if (tier <= 6) return 'yellow'
+    if (tier <= 5) return 'yellow'
     return 'red'
   }
   return 'unknown'
