@@ -5,6 +5,7 @@ using AoMapper.Sniffer.App;
 using AoMapper.Sniffer.Capture.Windows;
 using AoMapper.Sniffer.Core.Capture;
 using AoMapper.Sniffer.Core.Mapping;
+using AoMapper.Sniffer.Core.Photon;
 
 namespace AoMapper.Sniffer.Tests;
 
@@ -24,6 +25,23 @@ public sealed class IntegrationTests
     }
 
     [TestMethod]
+    public void PipelineExtractsKnownZoneFromTeleportPayload()
+    {
+        var payload = PacketFixture.ReliablePacket(PacketFixture.OperationRequest(
+            PhotonConstants.TeleportBackOperationCode,
+            new Dictionary<byte, Action<PacketFixture.ProtocolWriter>>
+            {
+                [1] = w => w.String("2308")
+            }));
+        var packet = new CapturedPacket(DateTimeOffset.UtcNow, payload, "10.0.0.1", 5055, "10.0.0.2", 5056);
+
+        var events = new SnifferPipeline(token => token == "2308").Process(packet);
+
+        Assert.HasCount(1, events);
+        Assert.AreEqual("2308", events[0].ZoneUniqueName);
+    }
+
+    [TestMethod]
     public void RawSocketParserDropsFragmentsAndExtractsUdpPayload()
     {
         var udpPayload = PacketFixture.ReliablePacket(PacketFixture.JoinResponse("OPEN_WORLD_BLACK_TharcalFissure"));
@@ -31,6 +49,50 @@ public sealed class IntegrationTests
         Assert.IsNull(RawSocketCaptureProvider.TryParseIPv4Udp(PacketFixture.IPv4UdpPacket(udpPayload, fragmentOffset: 1)));
 
         var parsed = RawSocketCaptureProvider.TryParseIPv4Udp(PacketFixture.IPv4UdpPacket(udpPayload));
+        Assert.IsNotNull(parsed);
+        CollectionAssert.AreEqual(udpPayload, parsed.UdpPayload);
+    }
+
+    [TestMethod]
+    public void RawSocketParserExtractsIPv6UdpPayload()
+    {
+        var udpPayload = PacketFixture.ReliablePacket(PacketFixture.JoinResponse("OPEN_WORLD_BLACK_TharcalFissure"));
+
+        var parsed = RawSocketCaptureProvider.TryParseIPv6Udp(PacketFixture.IPv6UdpPacket(udpPayload));
+
+        Assert.IsNotNull(parsed);
+        CollectionAssert.AreEqual(udpPayload, parsed.UdpPayload);
+    }
+
+    [TestMethod]
+    public void NpcapParserExtractsEthernetIPv4UdpPayload()
+    {
+        var udpPayload = PacketFixture.ReliablePacket(PacketFixture.JoinResponse("OPEN_WORLD_BLACK_TharcalFissure"));
+
+        var parsed = NpcapCaptureProvider.TryParseFrame(PacketFixture.EthernetFrame(0x0800, PacketFixture.IPv4UdpPacket(udpPayload)), 1);
+
+        Assert.IsNotNull(parsed);
+        CollectionAssert.AreEqual(udpPayload, parsed.UdpPayload);
+    }
+
+    [TestMethod]
+    public void NpcapParserExtractsEthernetIPv6UdpPayload()
+    {
+        var udpPayload = PacketFixture.ReliablePacket(PacketFixture.JoinResponse("OPEN_WORLD_BLACK_TharcalFissure"));
+
+        var parsed = NpcapCaptureProvider.TryParseFrame(PacketFixture.EthernetFrame(0x86dd, PacketFixture.IPv6UdpPacket(udpPayload)), 1);
+
+        Assert.IsNotNull(parsed);
+        CollectionAssert.AreEqual(udpPayload, parsed.UdpPayload);
+    }
+
+    [TestMethod]
+    public void NpcapParserExtractsRawIPv6UdpPayload()
+    {
+        var udpPayload = PacketFixture.ReliablePacket(PacketFixture.JoinResponse("OPEN_WORLD_BLACK_TharcalFissure"));
+
+        var parsed = NpcapCaptureProvider.TryParseFrame(PacketFixture.IPv6UdpPacket(udpPayload), 12);
+
         Assert.IsNotNull(parsed);
         CollectionAssert.AreEqual(udpPayload, parsed.UdpPayload);
     }

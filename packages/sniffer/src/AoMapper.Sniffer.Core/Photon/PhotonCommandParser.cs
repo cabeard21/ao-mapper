@@ -24,19 +24,23 @@ public sealed class PhotonCommandParser
         }
 
         var flags = packet[2];
-        if ((flags & PhotonConstants.EncryptedFlag) != 0)
+        if (flags == PhotonConstants.EncryptedFlag)
         {
             return new PhotonParseResult(payloads, ["Encrypted Photon payload ignored."]);
-        }
-
-        if ((flags & PhotonConstants.CrcFlag) != 0)
-        {
-            return new PhotonParseResult(payloads, ["CRC-protected Photon payload ignored."]);
         }
 
         var peerId = BinaryPrimitives.ReadUInt16LittleEndian(packet[..2]);
         var commandCount = packet[3];
         var offset = HeaderLength;
+        if (flags == PhotonConstants.CrcFlag)
+        {
+            if (packet.Length < offset + 4)
+            {
+                return new PhotonParseResult(payloads, ["CRC-protected Photon packet is truncated."]);
+            }
+
+            offset += 4;
+        }
 
         for (var i = 0; i < commandCount; i++)
         {

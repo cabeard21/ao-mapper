@@ -2,7 +2,7 @@ using AoMapper.Sniffer.Capture.Windows;
 
 namespace AoMapper.Sniffer.App;
 
-public sealed record SnifferOptions(string Host, int Port, CaptureProviderMode Provider, bool Debug)
+public sealed record SnifferOptions(string Host, int Port, CaptureProviderMode Provider, bool Debug, bool DebugVerbose, bool DebugZone)
 {
     public static SnifferOptions Parse(string[] args)
     {
@@ -10,6 +10,8 @@ public sealed record SnifferOptions(string Host, int Port, CaptureProviderMode P
         var port = 10001;
         var provider = CaptureProviderMode.Auto;
         var debug = false;
+        var debugVerbose = false;
+        var debugZone = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -27,10 +29,18 @@ public sealed record SnifferOptions(string Host, int Port, CaptureProviderMode P
                 case "--debug":
                     debug = true;
                     break;
+                case "--debug-verbose":
+                    debug = true;
+                    debugVerbose = true;
+                    break;
+                case "--debug-zone":
+                    debug = true;
+                    debugZone = true;
+                    break;
             }
         }
 
-        return new SnifferOptions(host, port, provider, debug);
+        return new SnifferOptions(host, port, provider, debug, debugVerbose, debugZone);
     }
 
     private static CaptureProviderMode ParseProvider(string value)

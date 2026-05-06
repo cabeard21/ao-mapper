@@ -16,8 +16,8 @@ public static class CaptureProviderFactory
         return mode switch
         {
             CaptureProviderMode.Npcap => CreateNpcapOrThrow(debugLog),
-            CaptureProviderMode.Raw => new RawSocketCaptureProvider(),
-            _ => TryCreateNpcap(debugLog) ?? new RawSocketCaptureProvider()
+            CaptureProviderMode.Raw => new RawSocketCaptureProvider(debugLog),
+            _ => TryCreateNpcap(debugLog) ?? new RawSocketCaptureProvider(debugLog)
         };
     }
 

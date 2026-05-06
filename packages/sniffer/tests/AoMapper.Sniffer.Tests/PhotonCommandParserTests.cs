@@ -12,11 +12,20 @@ public sealed class PhotonCommandParserTests
 
         Assert.IsEmpty(parser.Parse([1, 2, 3]).Payloads);
         Assert.IsEmpty(parser.Parse(PacketFixture.ReliablePacket([1], PhotonConstants.EncryptedFlag)).Payloads);
-        Assert.IsEmpty(parser.Parse(PacketFixture.ReliablePacket([1], PhotonConstants.CrcFlag)).Payloads);
 
         var malformed = PacketFixture.ReliablePacket([1, 2, 3]);
         malformed[16] = 200;
         Assert.IsEmpty(parser.Parse(malformed).Payloads);
+    }
+
+    [TestMethod]
+    public void ParseDispatchesCrcEnabledPackets()
+    {
+        var parser = new PhotonCommandParser();
+
+        CollectionAssert.AreEqual(
+            new byte[] { 1, 2 },
+            parser.Parse(PacketFixture.CrcReliablePacket([1, 2])).Payloads[0].Data);
     }
 
     [TestMethod]

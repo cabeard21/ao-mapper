@@ -19,11 +19,11 @@ public sealed class ZoneEventExtractorTests
     }
 
     [TestMethod]
-    public void ExtractPrefersSourceClusterFromJoinResponse()
+    public void ExtractPrefersCurrentMapFromJoinResponse()
     {
         var message = _decoder.DecodeMessage(PacketFixture.JoinResponse("CORRUPTED_SOLO_LETHAL", "4206"))!;
 
-        Assert.AreEqual("4206", _extractor.Extract(message)?.ZoneUniqueName);
+        Assert.AreEqual("CORRUPTED_SOLO_LETHAL", _extractor.Extract(message)?.ZoneUniqueName);
     }
 
     [TestMethod]
@@ -31,6 +31,17 @@ public sealed class ZoneEventExtractorTests
     {
         var message = _decoder.DecodeMessage(PacketFixture.ChangeClusterResponse("OPEN_WORLD_ROYAL_ForestCross"))!;
 
+        Assert.AreEqual("OPEN_WORLD_ROYAL_ForestCross", _extractor.Extract(message)?.ZoneUniqueName);
+    }
+
+    [TestMethod]
+    public void ExtractProducesZoneFromLegacyChangeClusterResponse()
+    {
+        var message = _decoder.DecodeMessage(PacketFixture.ChangeClusterResponse(
+            "OPEN_WORLD_ROYAL_ForestCross",
+            PhotonConstants.LegacyChangeClusterOperationCode))!;
+
+        Assert.AreEqual(PhotonConstants.LegacyChangeClusterOperationCode, message.Code);
         Assert.AreEqual("OPEN_WORLD_ROYAL_ForestCross", _extractor.Extract(message)?.ZoneUniqueName);
     }
 
@@ -74,6 +85,63 @@ public sealed class ZoneEventExtractorTests
     }
 
     [TestMethod]
+    public void ExtractProducesKnownZoneTokenFromTravelPlannerResponse()
+    {
+        var extractor = new ZoneEventExtractor(token => token == "2308");
+        var message = _decoder.DecodeMessage(PacketFixture.OperationResponse(
+            PhotonConstants.BuyJourneyOperationCode,
+            new Dictionary<byte, Action<PacketFixture.ProtocolWriter>>
+            {
+                [3] = w => w.String("2308")
+            }))!;
+
+        Assert.AreEqual(PhotonConstants.BuyJourneyOperationCode, message.Code);
+        Assert.AreEqual("2308", extractor.Extract(message)?.ZoneUniqueName);
+    }
+
+    [TestMethod]
+    public void ExtractProducesKnownZoneTokenFromTeleportBackRequest()
+    {
+        var extractor = new ZoneEventExtractor(token => token == "2308");
+        var message = _decoder.DecodeMessage(PacketFixture.OperationRequest(
+            PhotonConstants.TeleportBackOperationCode,
+            new Dictionary<byte, Action<PacketFixture.ProtocolWriter>>
+            {
+                [1] = w => w.String("2308")
+            }))!;
+
+        Assert.AreEqual(PhotonConstants.TeleportBackOperationCode, message.Code);
+        Assert.AreEqual("2308", extractor.Extract(message)?.ZoneUniqueName);
+    }
+
+    [TestMethod]
+    public void ExtractIgnoresUnknownTravelPlannerResponseStrings()
+    {
+        var extractor = new ZoneEventExtractor(token => token == "2308");
+        var message = _decoder.DecodeMessage(PacketFixture.OperationResponse(
+            PhotonConstants.BuyJourneyOperationCode,
+            new Dictionary<byte, Action<PacketFixture.ProtocolWriter>>
+            {
+                [3] = w => w.String("ADCSEASON_04@2026")
+            }))!;
+
+        Assert.IsNull(extractor.Extract(message));
+    }
+
+    [TestMethod]
+    public void ExtractIgnoresKnownZoneTokenFromUnrelatedResponse()
+    {
+        var extractor = new ZoneEventExtractor(token => token == "1207");
+        var message = new PhotonMessage(PhotonMessageKind.Response, 197, new Dictionary<byte, object?>
+        {
+            [0] = "1207",
+            [253] = 197
+        });
+
+        Assert.IsNull(extractor.Extract(message));
+    }
+
+    [TestMethod]
     public void ExtractIgnoresUnknownResponseStrings()
     {
         var extractor = new ZoneEventExtractor(token => token == "2308");
@@ -95,5 +163,32 @@ public sealed class ZoneEventExtractorTests
         });
 
         Assert.IsNull(_extractor.Extract(message));
+    }
+
+    [TestMethod]
+    public void ExtractIgnoresGameServerResponseWithoutKnownZoneToken()
+    {
+        var extractor = new ZoneEventExtractor(token => token == "2308");
+        var message = new PhotonMessage(PhotonMessageKind.Response, PhotonConstants.GetGameServerByClusterOperationCode, new Dictionary<byte, object?>
+        {
+            [0] = "live01-win-15.dc02.albiononline.com:5056",
+            [253] = PhotonConstants.GetGameServerByClusterOperationCode
+        });
+
+        Assert.IsNull(extractor.Extract(message));
+    }
+
+    [TestMethod]
+    public void ExtractProducesKnownZoneTokenFromGameServerResponse()
+    {
+        var extractor = new ZoneEventExtractor(token => token == "2308");
+        var message = new PhotonMessage(PhotonMessageKind.Response, PhotonConstants.GetGameServerByClusterOperationCode, new Dictionary<byte, object?>
+        {
+            [0] = "live01-win-15.dc02.albiononline.com:5056",
+            [1] = "2308",
+            [253] = PhotonConstants.GetGameServerByClusterOperationCode
+        });
+
+        Assert.AreEqual("2308", extractor.Extract(message)?.ZoneUniqueName);
     }
 }

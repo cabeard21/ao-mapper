@@ -1,12 +1,13 @@
 using AoMapper.Sniffer.App;
 using AoMapper.Sniffer.Capture.Windows;
+using AoMapper.Sniffer.Core.Capture;
 using AoMapper.Sniffer.Core.Mapping;
 using AoMapper.Sniffer.Core.Photon;
 using AoMapper.Sniffer.Core.Protocol18;
 
 var options = SnifferOptions.Parse(args);
 Action<string>? debugLog = options.Debug ? message => Console.WriteLine($"[debug] {message}") : null;
-await using var captureProvider = CaptureProviderFactory.Create(options.Provider, debugLog);
+await using var captureProvider = CaptureProviderFactory.Create(options.Provider, options.DebugVerbose || options.DebugZone ? debugLog : null);
 await using var webSocketServer = new SnifferWebSocketServer(options.Host, options.Port, captureProvider.Name);
 var zoneNameResolver = ZoneNameResolver.CreateDefault(debugLog);
 
@@ -21,10 +22,18 @@ Console.WriteLine($"Ao Mapper sniffer listening on ws://{options.Host}:{options.
 
 var serverTask = webSocketServer.RunAsync(cancellation.Token);
 var pipeline = new SnifferPipeline(zoneNameResolver.Contains);
+var debugZoneExtractor = options.Debug ? new ZoneEventExtractor(zoneNameResolver.Contains) : null;
 var packetCount = 0;
 var photonPayloadCount = 0;
 var decodedMessageCount = 0;
 var lastStats = DateTimeOffset.UtcNow;
+var lastStatsPacketCount = 0;
+var lastStatsPhotonPayloadCount = 0;
+var lastStatsDecodedMessageCount = 0;
+var debugOperationCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+var debugRequestResponseCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+var debugWarningCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+var debugWarningCount = 0;
 
 try
 {
@@ -34,33 +43,117 @@ try
         var result = pipeline.ProcessDetailed(packet);
         photonPayloadCount += result.PhotonPayloadCount;
         decodedMessageCount += result.Messages.Count;
-
         if (options.Debug)
         {
+            debugWarningCount += result.Warnings.Count;
             foreach (var warning in result.Warnings)
             {
-                Console.WriteLine($"[debug] photon warning: {warning}");
+                var key = NormalizeWarning(warning);
+                debugWarningCounts[key] = debugWarningCounts.GetValueOrDefault(key) + 1;
             }
 
             foreach (var message in result.Messages)
             {
-                Console.WriteLine($"[debug] decoded {message.Kind} code={message.Code} params={string.Join(",", message.Parameters.Keys.Order())}");
-                if (ShouldPrintParameterDetails(message))
+                var key = $"{message.Kind}:{message.Code}";
+                debugOperationCounts[key] = debugOperationCounts.GetValueOrDefault(key) + 1;
+                if (message.Kind is PhotonMessageKind.Request or PhotonMessageKind.Response)
                 {
-                    Console.WriteLine($"[debug] decoded detail {message.Kind} code={message.Code} {FormatParameters(message.Parameters)}");
+                    debugRequestResponseCounts[key] = debugRequestResponseCounts.GetValueOrDefault(key) + 1;
+                }
+            }
+        }
+
+        if (options.Debug)
+        {
+            if (options.DebugVerbose && !options.DebugZone)
+            {
+                foreach (var warning in result.Warnings)
+                {
+                    Console.WriteLine($"[debug] photon warning: {warning}");
+                }
+            }
+
+            foreach (var message in result.Messages)
+            {
+                var knownZoneCandidates = debugZoneExtractor?.FindKnownZoneCandidates(message).Take(8).ToArray() ?? [];
+                var zoneRelevant = SnifferDebug.IsZoneRelevantMessage(message);
+                if (options.DebugZone)
+                {
+                    if (!SnifferDebug.ShouldPrintZoneFocusedMessage(message, knownZoneCandidates))
+                    {
+                        continue;
+                    }
+
+                    Console.WriteLine(
+                        $"[debug] zone-focused {message.Kind} code={message.Code} "
+                        + $"{FormatEndpoint(packet)} "
+                        + $"params={string.Join(",", message.Parameters.Keys.Order())}");
+                    Console.WriteLine($"[debug] zone-focused detail {message.Kind} code={message.Code} {FormatParameters(message.Parameters)}");
+                    if (knownZoneCandidates.Length > 0)
+                    {
+                        Console.WriteLine(
+                            $"[debug] decoded known zone candidates {message.Kind} code={message.Code} "
+                            + string.Join("; ", knownZoneCandidates.Select(candidate => $"{candidate.Path}={Quote(candidate.Value)}")));
+                    }
+                    else
+                    {
+                        var stringCandidates = FindStringCandidates(message.Parameters).Take(8).ToArray();
+                        Console.WriteLine(
+                            $"[debug] zone-focused no known token {message.Kind} code={message.Code}"
+                            + (stringCandidates.Length > 0 ? $" strings={string.Join("; ", stringCandidates)}" : string.Empty));
+                    }
+
+                    continue;
                 }
 
-                var stringCandidates = FindStringCandidates(message.Parameters).Take(8).ToArray();
-                if (stringCandidates.Length > 0)
+                if (zoneRelevant && knownZoneCandidates.Length > 0)
                 {
-                    Console.WriteLine($"[debug] decoded strings {message.Kind} code={message.Code} {string.Join("; ", stringCandidates)}");
+                    Console.WriteLine(
+                        $"[debug] decoded known zone candidates {message.Kind} code={message.Code} "
+                        + string.Join("; ", knownZoneCandidates.Select(candidate => $"{candidate.Path}={Quote(candidate.Value)}")));
+                }
+
+                if (options.DebugVerbose)
+                {
+                    Console.WriteLine($"[debug] decoded {message.Kind} code={message.Code} params={string.Join(",", message.Parameters.Keys.Order())}");
+                    if (ShouldPrintParameterDetails(message))
+                    {
+                        Console.WriteLine($"[debug] decoded detail {message.Kind} code={message.Code} {FormatParameters(message.Parameters)}");
+                    }
+
+                    var stringCandidates = FindStringCandidates(message.Parameters).Take(8).ToArray();
+                    if (stringCandidates.Length > 0)
+                    {
+                        Console.WriteLine($"[debug] decoded strings {message.Kind} code={message.Code} {string.Join("; ", stringCandidates)}");
+                    }
+                }
+                else if (knownZoneCandidates.Length == 0 && zoneRelevant)
+                {
+                    var stringCandidates = FindStringCandidates(message.Parameters).Take(8).ToArray();
+                    Console.WriteLine(
+                        $"[debug] decoded zone op without known token {message.Kind} code={message.Code} "
+                        + $"params={string.Join(",", message.Parameters.Keys.Order())}"
+                        + (stringCandidates.Length > 0 ? $" strings={string.Join("; ", stringCandidates)}" : string.Empty));
                 }
             }
 
             var now = DateTimeOffset.UtcNow;
-            if (now - lastStats >= TimeSpan.FromSeconds(5))
+            if (now - lastStats >= TimeSpan.FromSeconds(options.DebugVerbose ? 5 : 10))
             {
-                Console.WriteLine($"[debug] stats packets={packetCount} photonPayloads={photonPayloadCount} decodedMessages={decodedMessageCount}");
+                Console.WriteLine(
+                    $"[debug] traffic +{packetCount - lastStatsPacketCount} packets "
+                    + $"+{photonPayloadCount - lastStatsPhotonPayloadCount} photonPayloads "
+                    + $"+{decodedMessageCount - lastStatsDecodedMessageCount} decodedMessages"
+                    + (debugOperationCounts.Count > 0 ? $" ops={FormatOperationCounts(debugOperationCounts)}" : string.Empty)
+                    + (debugRequestResponseCounts.Count > 0 ? $" reqres={FormatOperationCounts(debugRequestResponseCounts, 16)}" : string.Empty)
+                    + (debugWarningCount > 0 ? $" warnings={debugWarningCount} warningTypes={FormatOperationCounts(debugWarningCounts, 6)}" : string.Empty));
+                debugOperationCounts.Clear();
+                debugRequestResponseCounts.Clear();
+                debugWarningCounts.Clear();
+                debugWarningCount = 0;
+                lastStatsPacketCount = packetCount;
+                lastStatsPhotonPayloadCount = photonPayloadCount;
+                lastStatsDecodedMessageCount = decodedMessageCount;
                 lastStats = now;
             }
         }
@@ -88,12 +181,35 @@ finally
     await serverTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 }
 
+static string FormatOperationCounts(IReadOnlyDictionary<string, int> counts, int limit = 12)
+{
+    return string.Join(", ", counts
+        .OrderByDescending(pair => pair.Value)
+        .ThenBy(pair => pair.Key)
+        .Take(limit)
+        .Select(pair => $"{pair.Key}={pair.Value}"));
+}
+
+static string FormatEndpoint(CapturedPacket packet)
+{
+    return $"{packet.SourceAddress}:{packet.SourcePort}->{packet.DestinationAddress}:{packet.DestinationPort}";
+}
+
+static string NormalizeWarning(string warning)
+{
+    var payloadIndex = warning.IndexOf(" payload=", StringComparison.Ordinal);
+    var normalized = payloadIndex >= 0 ? warning[..payloadIndex] : warning;
+    return TrimForLog(normalized, 80);
+}
+
 static bool ShouldPrintParameterDetails(PhotonMessage message)
 {
     return message.Kind switch
     {
         PhotonMessageKind.Response => message.Code != 1
-            || message.Code is PhotonConstants.JoinOperationCode or PhotonConstants.ChangeClusterOperationCode
+            || message.Code is PhotonConstants.JoinOperationCode
+                or PhotonConstants.ChangeClusterOperationCode
+                or PhotonConstants.LegacyChangeClusterOperationCode
             || message.Parameters.ContainsKey(8)
             || message.Parameters.ContainsKey(65),
         PhotonMessageKind.Request => message.Code is PhotonConstants.JoinOperationCode

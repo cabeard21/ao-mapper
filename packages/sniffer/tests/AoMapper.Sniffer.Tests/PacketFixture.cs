@@ -22,6 +22,26 @@ internal static class PacketFixture
         return packet;
     }
 
+    public static byte[] CrcReliablePacket(byte[] payload)
+    {
+        var commandLength = 13 + payload.Length;
+        var packet = new byte[16 + commandLength];
+        BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(0, 2), 1);
+        packet[2] = PhotonConstants.CrcFlag;
+        packet[3] = 1;
+        packet[12] = 0x12;
+        packet[13] = 0x34;
+        packet[14] = 0x56;
+        packet[15] = 0x78;
+        packet[16] = PhotonConstants.ReliableCommand;
+        packet[17] = 0;
+        BinaryPrimitives.WriteInt32BigEndian(packet.AsSpan(20, 4), commandLength);
+        BinaryPrimitives.WriteInt32BigEndian(packet.AsSpan(24, 4), 10);
+        packet[28] = 0xf3;
+        payload.CopyTo(packet.AsSpan(29));
+        return packet;
+    }
+
     public static byte[] UnreliablePacket(byte[] payload)
     {
         var commandLength = 17 + payload.Length;
@@ -85,6 +105,33 @@ internal static class PacketFixture
         return packet;
     }
 
+    public static byte[] IPv6UdpPacket(byte[] udpPayload, int sourcePort = 5055, int destinationPort = 5056)
+    {
+        var udpLength = 8 + udpPayload.Length;
+        var packet = new byte[40 + udpLength];
+        packet[0] = 0x60;
+        BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(4, 2), (ushort)udpLength);
+        packet[6] = 17;
+        packet[7] = 64;
+        packet[23] = 1;
+        packet[39] = 2;
+        BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(40, 2), (ushort)sourcePort);
+        BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(42, 2), (ushort)destinationPort);
+        BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(44, 2), (ushort)udpLength);
+        udpPayload.CopyTo(packet.AsSpan(48));
+        return packet;
+    }
+
+    public static byte[] EthernetFrame(ushort etherType, byte[] payload)
+    {
+        var frame = new byte[14 + payload.Length];
+        frame[0] = 0x02;
+        frame[6] = 0x02;
+        BinaryPrimitives.WriteUInt16BigEndian(frame.AsSpan(12, 2), etherType);
+        payload.CopyTo(frame.AsSpan(14));
+        return frame;
+    }
+
     public static byte[] JoinResponse(string zoneUniqueName)
     {
         var writer = new ProtocolWriter();
@@ -116,14 +163,20 @@ internal static class PacketFixture
 
     public static byte[] ChangeClusterResponse(string zoneUniqueName)
     {
+        return ChangeClusterResponse(zoneUniqueName, PhotonConstants.ChangeClusterOperationCode);
+    }
+
+    public static byte[] ChangeClusterResponse(string zoneUniqueName, int operationCode)
+    {
         var writer = new ProtocolWriter();
         writer.Byte(3);
-        writer.Byte(PhotonConstants.ChangeClusterOperationCode);
+        writer.Byte(1);
         writer.Int16Little(0);
         writer.Null();
         writer.ParameterTable(new Dictionary<byte, Action<ProtocolWriter>>
         {
-            [0] = w => w.String(zoneUniqueName)
+            [0] = w => w.String(zoneUniqueName),
+            [PhotonConstants.OperationCodeParameter] = w => w.CompressedInt(operationCode)
         });
         return writer.ToArray();
     }
@@ -153,6 +206,28 @@ internal static class PacketFixture
             [0] = w => w.String(zoneIndex),
             [253] = w => w.CompressedInt(PhotonConstants.GetGameServerByClusterOperationCode)
         });
+        return writer.ToArray();
+    }
+
+    public static byte[] OperationRequest(int operationCode, Dictionary<byte, Action<ProtocolWriter>> parameters)
+    {
+        var writer = new ProtocolWriter();
+        writer.Byte(2);
+        writer.Byte(1);
+        parameters[PhotonConstants.OperationCodeParameter] = w => w.CompressedInt(operationCode);
+        writer.ParameterTable(parameters);
+        return writer.ToArray();
+    }
+
+    public static byte[] OperationResponse(int operationCode, Dictionary<byte, Action<ProtocolWriter>> parameters)
+    {
+        var writer = new ProtocolWriter();
+        writer.Byte(3);
+        writer.Byte(1);
+        writer.Int16Little(0);
+        writer.Null();
+        parameters[PhotonConstants.OperationCodeParameter] = w => w.CompressedInt(operationCode);
+        writer.ParameterTable(parameters);
         return writer.ToArray();
     }
 
