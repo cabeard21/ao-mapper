@@ -1,0 +1,18 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://ao_mapper:ao_mapper@postgres:5432/ao_mapper
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+      PORT: 3001
+      SNIFFER_WS_URL: ws://host.docker.internal:10001/ws
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

@@ -17,6 +17,24 @@ This repository is a pnpm workspace with four packages:
 Reference repositories used during development are checked in as git submodules
 under `refs/`.
 
+## Quick Start (Windows)
+
+Prerequisites: Node.js 20+, pnpm 9+, Docker Desktop.
+
+```bat
+start.bat
+```
+
+This will start Docker, install dependencies, build all packages, run migrations, seed zone data if empty, and open the map in your browser. Two terminal windows stay open — one for the API and one for the frontend. Close them to stop the servers.
+
+To also enable automatic zone detection from the game, open a **new elevated (Administrator) terminal** and run:
+
+```bash
+pnpm sniffer:dev -- --provider raw --host 127.0.0.1 --port 10001
+```
+
+Raw socket capture requires administrator privileges. Install [Npcap](https://npcap.com) for best compatibility on Windows.
+
 ## Requirements
 
 - Node.js 20 or newer
@@ -66,7 +84,7 @@ traffic to the API on `http://localhost:3001`.
 Run the Windows sniffer sidecar in a separate elevated terminal:
 
 ```bash
-pnpm sniffer:dev -- --provider auto --host 127.0.0.1 --port 10001
+pnpm sniffer:dev -- --provider raw --host 127.0.0.1 --port 10001
 ```
 
 The sidecar hosts `ws://127.0.0.1:10001/ws` and emits mapper-focused
@@ -134,6 +152,18 @@ The API exposes:
 - `GET /api/route/to-city?from=...` - calculate city distances from a zone.
 
 The API broadcasts realtime map changes over the `/ws` WebSocket endpoint.
+
+## Production Mode (single process, no Vite)
+
+Build a single Docker image that serves the frontend as static files from the API:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
+```
+
+Open `http://localhost:3001`. No Vite dev server is involved — Express serves the built frontend directly. API endpoints and WebSocket remain at the same paths.
+
+To run the sniffer alongside the production container, start it on the host machine as usual (elevated terminal); the container connects to it via `host.docker.internal:10001`.
 
 ## Notes
 

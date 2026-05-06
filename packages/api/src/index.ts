@@ -31,6 +31,14 @@ app.use("/api/layout", layoutRouter);
 app.use("/api/route", routeRouter);
 app.use("/api/settings", settingsRouter);
 
+if (process.env.NODE_ENV === "production" || process.env.SERVE_FRONTEND === "true") {
+  const frontendDist = path.join(__dirname, "../../frontend/dist");
+  app.use(express.static(frontendDist));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(frontendDist, "index.html"));
+  });
+}
+
 (async () => {
   try {
     await migrate(pool);
