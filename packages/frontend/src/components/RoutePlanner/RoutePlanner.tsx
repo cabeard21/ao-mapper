@@ -183,11 +183,36 @@ export function RoutePlanner() {
     [homeZoneId, nodes]
   );
 
+  const nearestRedMutation = useMutation({
+    mutationFn: async () => {
+      const fromId = fromZone?.id ?? currentZoneId;
+      if (!fromId) throw new Error("No from zone");
+      const { data } = await axios.get<ApiResponse<RouteResult>>("/api/route/nearest-red", {
+        params: { from: fromId },
+      });
+      if (!data.success || !data.data) {
+        throw new Error(data.error ?? "Nearest red zone search failed");
+      }
+      return data.data;
+    },
+    onSuccess: (route) => {
+      const redZone = route.steps.at(-1)?.zone ?? null;
+      const firstZone = route.steps.at(0)?.zone ?? null;
+      if (redZone) setToZone(redZone);
+      if (!fromZone && firstZone) setFromZone(firstZone);
+      clearRoute();
+      setRoutePath(route.path ?? []);
+      addRouteNodes(route.steps.map((step) => zoneToNode(step.zone, "route")));
+      setActiveRoute(route);
+    },
+  });
+
   const setPlannerFromZone = (zone: Zone) => {
     setFromZone(zone);
     setActiveRoute(null);
     routeMutation.reset();
     nearestCityMutation.reset();
+    nearestRedMutation.reset();
   };
 
   const setPlannerToZone = (zone: Zone) => {
@@ -195,6 +220,7 @@ export function RoutePlanner() {
     setActiveRoute(null);
     routeMutation.reset();
     nearestCityMutation.reset();
+    nearestRedMutation.reset();
   };
 
   const handleSwapZones = () => {
@@ -204,6 +230,7 @@ export function RoutePlanner() {
     setActiveRoute(null);
     routeMutation.reset();
     nearestCityMutation.reset();
+    nearestRedMutation.reset();
   };
 
   const canNearestCity = Boolean(fromZone?.id ?? currentZoneId);
@@ -312,6 +339,15 @@ export function RoutePlanner() {
                 >
                   {nearestCityMutation.isPending ? "..." : "City"}
                 </button>
+                <button
+                  type="button"
+                  title="Find nearest red zone from current From zone"
+                  disabled={!canNearestCity || nearestRedMutation.isPending}
+                  onClick={() => nearestRedMutation.mutate()}
+                  style={canNearestCity && !nearestRedMutation.isPending ? redShortcutButtonStyle : disabledRedShortcutButtonStyle}
+                >
+                  {nearestRedMutation.isPending ? "..." : "Red"}
+                </button>
               </>
             }
           />
@@ -352,6 +388,7 @@ export function RoutePlanner() {
               clearRoute();
               routeMutation.reset();
               nearestCityMutation.reset();
+              nearestRedMutation.reset();
             }}
             style={secondaryButtonStyle}
           >
@@ -363,10 +400,10 @@ export function RoutePlanner() {
           <div style={mutedStateStyle}>Choose two different zones.</div>
         ) : null}
 
-        {routeMutation.isError || nearestCityMutation.isError ? (
+        {routeMutation.isError || nearestCityMutation.isError || nearestRedMutation.isError ? (
           <div style={errorStateStyle}>
             {(() => {
-              const err = routeMutation.error ?? nearestCityMutation.error;
+              const err = routeMutation.error ?? nearestCityMutation.error ?? nearestRedMutation.error;
               return err instanceof Error ? err.message : "Route search failed";
             })()}
           </div>
@@ -565,6 +602,19 @@ const shortcutButtonStyle = {
 
 const disabledShortcutButtonStyle = {
   ...shortcutButtonStyle,
+  opacity: 0.45,
+  cursor: "default",
+};
+
+const redShortcutButtonStyle = {
+  ...shortcutButtonStyle,
+  border: "1px solid #7a2020",
+  background: "#3a1010",
+  color: "#ff9c9c",
+};
+
+const disabledRedShortcutButtonStyle = {
+  ...redShortcutButtonStyle,
   opacity: 0.45,
   cursor: "default",
 };
