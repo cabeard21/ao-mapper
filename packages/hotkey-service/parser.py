@@ -41,6 +41,8 @@ def _extract_zone_name(lines: list[str], text: str) -> str | None:
                 candidate = lines[j].strip()
                 if len(candidate) <= 1:
                     continue
+                if re.match(r"^\d[\d./]*$", candidate):  # charge line like "7.54", "7/7", "05.27"
+                    continue
                 if re.match(r"[A-Z][A-Za-z0-9][A-Za-z0-9\- ]*$", candidate):
                     return candidate
                 break
@@ -61,14 +63,16 @@ def _extract_max_charges(text: str) -> int:
     # OCR misreads "/" as "." and often prepends extra digits (e.g. "7" → "37", "20" → "20")
     # Since only 7-man and 20-man portals exist, snap by matching the last digit of the parsed number:
     # 7 ends in 7, 20 ends in 0 — OCR noise prepends but rarely changes the final digit.
-    match = re.search(r"\d+\s*[/.]\s*(\d+)", text)
+    match = re.search(r"(\d+)\s*[/.]\s*(\d+)", text)
     if match:
-        parsed = int(match.group(1))
-        last = parsed % 10
-        for size in _VALID_PORTAL_SIZES:
-            if size % 10 == last:
-                return size
-        return min(_VALID_PORTAL_SIZES, key=lambda s: abs(s - parsed))
+        # Try right side first (max capacity), then left side (current charges)
+        for idx in [2, 1]:
+            parsed = int(match.group(idx))
+            last = parsed % 10
+            for size in _VALID_PORTAL_SIZES:
+                if size % 10 == last:
+                    return size
+        return min(_VALID_PORTAL_SIZES, key=lambda s: abs(s - int(match.group(2))))
     return 7  # default to 7-man if not found
 
 
@@ -85,5 +89,10 @@ def _extract_minutes(text: str) -> int | None:
     m_only = re.search(r"(\d+)\s*m\b", text, re.IGNORECASE)
     if m_only:
         return int(m_only.group(1))
+
+    # OCR can reverse the minute marker around noisy close text, e.g. "Closegin m 52 $".
+    reversed_m_only = re.search(r"\bclos\w*\b.*?\bm\s*(\d{1,2})\b", text, re.IGNORECASE)
+    if reversed_m_only:
+        return int(reversed_m_only.group(1))
 
     return None

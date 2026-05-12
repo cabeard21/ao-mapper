@@ -34,6 +34,21 @@ class TestExtractZoneNameOcrArtifacts:
         assert result is not None
         assert result["toZoneName"] == "Oetos-Oyexlos"
 
+    def test_charges_line_before_zone_name(self):
+        # OCR sometimes returns charge reading before zone name (lines swapped)
+        result = parse_tooltip(["Road of Avalon t0", "7.54", "Hiros-Juderom", "nla", "Closes in 2 h 17 m"])
+        assert result is not None
+        assert result["toZoneName"] == "Hiros-Juderom"
+        assert result["charges"] == 7
+        assert result["closesInMinutes"] == 2 * 60 + 17
+
+    def test_recovers_destination_with_garbled_close_timer(self):
+        result = parse_tooltip(["Road of Avalon to", "Hilltes-Ugumtum", "09:13", "2", "Closegin ", "m 52 $"])
+        assert result is not None
+        assert result["toZoneName"] == "Hilltes-Ugumtum"
+        assert result["charges"] == 7
+        assert result["closesInMinutes"] == 52
+
 
 class TestExtractMaxCharges:
     def test_seven_man(self):
