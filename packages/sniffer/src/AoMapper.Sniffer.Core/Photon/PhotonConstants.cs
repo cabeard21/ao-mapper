@@ -20,6 +20,7 @@ public static class PhotonConstants
     public const int TravelFactionWarfarePortalOperationCode = 534;
     public const byte OperationCodeParameter = 253;
     public const byte EventCodeParameter = 252;
+    public const byte ResponseStatusParameter = 255;
 
     public static bool LooksLikePhoton(ReadOnlySpan<byte> payload)
     {

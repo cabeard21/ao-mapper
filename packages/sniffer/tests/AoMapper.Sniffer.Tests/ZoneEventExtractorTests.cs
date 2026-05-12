@@ -179,6 +179,21 @@ public sealed class ZoneEventExtractorTests
     }
 
     [TestMethod]
+    public void ExtractIgnoresGameServerResponseStatusEvenWhenItMatchesKnownZoneIndex()
+    {
+        var extractor = new ZoneEventExtractor(token => token == "6");
+        var message = new PhotonMessage(PhotonMessageKind.Response, PhotonConstants.GetGameServerByClusterOperationCode, new Dictionary<byte, object?>
+        {
+            [0] = "live01-win-45.dc02.albiononline.com:5056",
+            [253] = PhotonConstants.GetGameServerByClusterOperationCode,
+            [255] = 6
+        });
+
+        Assert.IsNull(extractor.Extract(message));
+        Assert.HasCount(0, extractor.FindKnownZoneCandidates(message));
+    }
+
+    [TestMethod]
     public void ExtractProducesKnownZoneTokenFromGameServerResponse()
     {
         var extractor = new ZoneEventExtractor(token => token == "2308");

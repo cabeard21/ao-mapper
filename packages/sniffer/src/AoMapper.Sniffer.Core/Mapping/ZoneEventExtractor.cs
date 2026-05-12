@@ -66,10 +66,22 @@ public sealed class ZoneEventExtractor
         var candidates = new List<ZoneTokenCandidate>();
         foreach (var (key, value) in parameters.OrderBy(pair => pair.Key))
         {
+            if (IsPhotonMetadataParameter(key))
+            {
+                continue;
+            }
+
             FindKnownZoneCandidatesInValue(value, $"p{key}", candidates);
         }
 
         return candidates;
+    }
+
+    private static bool IsPhotonMetadataParameter(byte key)
+    {
+        return key is PhotonConstants.EventCodeParameter
+            or PhotonConstants.OperationCodeParameter
+            or PhotonConstants.ResponseStatusParameter;
     }
 
     private void FindKnownZoneCandidatesInValue(object? value, string path, ICollection<ZoneTokenCandidate> candidates)
