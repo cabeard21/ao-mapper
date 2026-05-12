@@ -201,7 +201,7 @@ describe("RouteOptimizer", () => {
       steps: [
         { zone: zoneA, enterDirection: null, exitDirection: "NE" },
         { zone: roadsZone, enterDirection: null, exitDirection: null },
-        { zone: zoneB, enterDirection: null, exitDirection: null },
+        { zone: zoneB, enterDirection: "SW", exitDirection: null },
       ],
     });
   });
@@ -239,6 +239,157 @@ describe("RouteOptimizer", () => {
       steps: [
         { zone: drywater, enterDirection: null, exitDirection: "NW" },
         { zone: longmarch, enterDirection: "SE", exitDirection: null },
+      ],
+    });
+  });
+
+  it("prefers the route with lower in-zone traversal from the current entry portal", async () => {
+    const lymhurst = zone("lymhurst", "Lymhurst", [], "royal");
+    const ferndell = zone("ferndell", "Ferndell", [], "blue");
+    const willowWood = zone("willow", "Willow Wood", [], "yellow");
+    const crackedEarth = zone("cracked", "Cracked Earth", [], "blue");
+    const dryfield = zone("dryfield", "Dryfield Meadow", [], "blue");
+    const optimizer = new RouteOptimizer({
+      findActiveConnections: async () => [],
+      findStaticEdges: async () => [
+        {
+          fromZoneId: "lymhurst",
+          toZoneId: "ferndell",
+          weight: 75,
+          fromPosition: [0, 0],
+          toPosition: [-210.5, 378.5],
+          directed: true,
+        },
+        {
+          fromZoneId: "ferndell",
+          toZoneId: "willow",
+          weight: 171,
+          fromPosition: [-0.5, -375.5],
+          toPosition: [190.5, 375.5],
+          directed: true,
+        },
+        {
+          fromZoneId: "ferndell",
+          toZoneId: "cracked",
+          weight: 238,
+          fromPosition: [375.5, -0.5],
+          toPosition: [-335.5, -170.5],
+          directed: true,
+        },
+        {
+          fromZoneId: "willow",
+          toZoneId: "dryfield",
+          weight: 379,
+          fromPosition: [375.5, -70.5],
+          toPosition: [-378.5, 190.5],
+          directed: true,
+        },
+        {
+          fromZoneId: "cracked",
+          toZoneId: "dryfield",
+          weight: 379,
+          fromPosition: [-162.5, -334.5],
+          toPosition: [-49.5, 378.5],
+          directed: true,
+        },
+      ],
+      findZoneById: zonesById([lymhurst, ferndell, willowWood, crackedEarth, dryfield]),
+    });
+
+    await expect(optimizer.findRoute("lymhurst", "dryfield")).resolves.toMatchObject({
+      path: ["lymhurst", "ferndell", "cracked", "dryfield"],
+      hops: 3,
+    });
+  });
+
+  it("does not use an active portal U-turn to reset static traversal position", async () => {
+    const start = zone("start", "Start");
+    const hub = zone("hub", "Hub");
+    const road = zone("road", "Road", [], "roads");
+    const target = zone("target", "Target");
+    const optimizer = new RouteOptimizer({
+      findActiveConnections: async () => [connection("hub-road", "hub", "road")],
+      findStaticEdges: async () => [
+        {
+          fromZoneId: "start",
+          toZoneId: "hub",
+          weight: 1,
+          toPosition: [0, 0],
+          directed: true,
+        },
+        {
+          fromZoneId: "hub",
+          toZoneId: "target",
+          weight: 1,
+          fromPosition: [100, 0],
+          directed: true,
+        },
+      ],
+      findZoneById: zonesById([start, hub, road, target]),
+    });
+
+    await expect(optimizer.findRoute("start", "target")).resolves.toMatchObject({
+      path: ["start", "hub", "target"],
+      cost: 101,
+    });
+  });
+
+  it("still allows active portals as forward route segments", async () => {
+    const start = zone("start", "Start");
+    const road = zone("road", "Road", [], "roads");
+    const target = zone("target", "Target");
+    const optimizer = new RouteOptimizer({
+      findActiveConnections: async () => [connection("start-road", "start", "road")],
+      findStaticEdges: async () => [
+        {
+          fromZoneId: "road",
+          toZoneId: "target",
+          weight: 1,
+          directed: true,
+        },
+      ],
+      findZoneById: zonesById([start, road, target]),
+    });
+
+    await expect(optimizer.findRoute("start", "target")).resolves.toMatchObject({
+      path: ["start", "road", "target"],
+      cost: 2,
+    });
+  });
+
+  it("uses static edge destination positions for enter directions", async () => {
+    const zoneA = zone("a", "A", [], "black", {
+      afm: {
+        id: "afm-a",
+        minimapBoundsMin: [-100, -100],
+        minimapBoundsMax: [100, 100],
+      },
+    });
+    const zoneB = zone("b", "B", [], "black", {
+      afm: {
+        id: "afm-b",
+        minimapBoundsMin: [-100, -100],
+        minimapBoundsMax: [100, 100],
+      },
+    });
+    const optimizer = new RouteOptimizer({
+      findActiveConnections: async () => [],
+      findStaticEdges: async () => [
+        {
+          fromZoneId: "a",
+          toZoneId: "b",
+          fromPosition: [80, -80],
+          toPosition: [-80, 80],
+          directed: true,
+        },
+      ],
+      findZoneById: zonesById([zoneA, zoneB]),
+    });
+
+    await expect(optimizer.findRoute("a", "b")).resolves.toMatchObject({
+      steps: [
+        { zone: zoneA, enterDirection: null, exitDirection: "NE" },
+        { zone: zoneB, enterDirection: "SW", exitDirection: null },
       ],
     });
   });
@@ -316,7 +467,7 @@ describe("RouteOptimizer", () => {
     await optimizer.invalidateRoutes();
 
     expect(findActiveConnections).toHaveBeenCalledTimes(1);
-    expect(cache.set).toHaveBeenCalledWith("route:v5:a:b", {
+    expect(cache.set).toHaveBeenCalledWith("route:v7:a:b", {
       path: ["a", "b"],
       hops: 1,
       cost: 1,

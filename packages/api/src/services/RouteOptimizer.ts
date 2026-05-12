@@ -17,6 +17,7 @@ export interface RouteEdge {
   fromPosition?: Point;
   toPosition?: Point;
   directed?: boolean;
+  positionsMathY?: boolean;
 }
 
 export interface RouteCache {
@@ -39,8 +40,11 @@ interface GraphEdge {
   toZoneId: string;
   weight: number;
   source: RouteConnectionSource;
+  activeConnectionId?: string;
   fromPosition?: Point;
   toPosition?: Point;
+  directed?: boolean;
+  positionsMathY?: boolean;
 }
 
 interface PathResult {
@@ -66,7 +70,7 @@ interface AfmMetadata {
 }
 
 const routeCacheKey = (fromZoneId: string, toZoneId: string): string =>
-  `route:v5:${fromZoneId}:${toZoneId}`;
+  `route:v8:${fromZoneId}:${toZoneId}`;
 
 function isPoint(value: unknown): value is Point {
   return (
@@ -123,6 +127,7 @@ function buildGraph(connections: Connection[], staticEdges: RouteEdge[]): RouteG
       toZoneId: connection.toZoneId,
       weight: 1,
       source: "active",
+      activeConnectionId: connection.id,
     });
   }
   for (const edge of staticEdges) {
@@ -133,6 +138,8 @@ function buildGraph(connections: Connection[], staticEdges: RouteEdge[]): RouteG
       source: "static",
       fromPosition: edge.fromPosition,
       toPosition: edge.toPosition,
+      directed: edge.directed,
+      positionsMathY: edge.positionsMathY,
     };
     if (edge.directed) {
       graph.set(edge.fromZoneId, [...(graph.get(edge.fromZoneId) ?? []), graphEdge]);
@@ -147,56 +154,124 @@ function isCurrentRouteResult(value: RouteResult): boolean {
   return "cost" in value && Array.isArray(value.steps);
 }
 
+function pointKey(position: Point | undefined): string {
+  return position ? `${position[0]},${position[1]}` : "unknown";
+}
+
+function stateKey(zoneId: string, entryPosition: Point | undefined): string {
+  return `${zoneId}|${pointKey(entryPosition)}`;
+}
+
+function distanceBetween(a: Point, b: Point): number {
+  return Math.max(1, Math.round(Math.hypot(a[0] - b[0], a[1] - b[1])));
+}
+
+function staticTransitionCost(edge: GraphEdge, entryPosition: Point | undefined): number {
+  if (edge.source !== "static" || !entryPosition || !edge.fromPosition) {
+    return edge.weight;
+  }
+  return distanceBetween(entryPosition, edge.fromPosition);
+}
+
+function isImmediateActiveEdgeReversal(
+  previousEdge: GraphEdge | undefined,
+  nextEdge: GraphEdge
+): boolean {
+  return (
+    previousEdge?.source === "active" &&
+    nextEdge.source === "active" &&
+    previousEdge.activeConnectionId !== undefined &&
+    previousEdge.activeConnectionId === nextEdge.activeConnectionId &&
+    previousEdge.fromZoneId === nextEdge.toZoneId &&
+    previousEdge.toZoneId === nextEdge.fromZoneId
+  );
+}
+
 function shortestPath(graph: RouteGraph, from: string, to: string): PathResult {
   if (from === to) {
     return { path: [from], hops: 0, cost: 0, edges: [] };
   }
 
-  const distances = new Map<string, number>([[from, 0]]);
-  const previous = new Map<string, GraphEdge>();
+  const startKey = stateKey(from, undefined);
+  const distances = new Map<string, number>([[startKey, 0]]);
+  const states = new Map<string, { zoneId: string; entryPosition?: Point }>([
+    [startKey, { zoneId: from }],
+  ]);
+  const previous = new Map<string, { previousKey: string; edge: GraphEdge }>();
   const visited = new Set<string>();
+  const settledZones = new Set<string>();
 
   while (true) {
-    let current: string | null = null;
+    let currentKey: string | null = null;
     let currentDistance = Number.POSITIVE_INFINITY;
-    for (const [zoneId, distance] of distances) {
-      if (!visited.has(zoneId) && distance < currentDistance) {
-        current = zoneId;
+    for (const [key, distance] of distances) {
+      if (!visited.has(key) && distance < currentDistance) {
+        currentKey = key;
         currentDistance = distance;
       }
     }
+    if (!currentKey) {
+      break;
+    }
+    const current = states.get(currentKey);
     if (!current) {
       break;
     }
-    if (current === to) {
+    if (current.zoneId === to) {
       break;
     }
 
-    visited.add(current);
-    const neighbors = graph.get(current) ?? [];
+    visited.add(currentKey);
+
+    // Each zone is expanded at most once. Without this, the optimizer can re-enter
+    // the same zone via a different static edge to obtain a cheaper entry position
+    // for onward travel, producing paths that visit the same zone twice (U-turns).
+    if (settledZones.has(current.zoneId)) {
+      continue;
+    }
+    settledZones.add(current.zoneId);
+
+    const neighbors = graph.get(current.zoneId) ?? [];
+    const previousEdge = previous.get(currentKey)?.edge;
 
     for (const edge of neighbors) {
-      const nextDistance = currentDistance + edge.weight;
-      if (nextDistance < (distances.get(edge.toZoneId) ?? Number.POSITIVE_INFINITY)) {
-        distances.set(edge.toZoneId, nextDistance);
-        previous.set(edge.toZoneId, edge);
+      if (isImmediateActiveEdgeReversal(previousEdge, edge)) {
+        continue;
+      }
+      const nextEntryPosition = edge.source === "static" ? edge.toPosition : undefined;
+      const nextKey = stateKey(edge.toZoneId, nextEntryPosition);
+      const nextDistance = currentDistance + staticTransitionCost(edge, current.entryPosition);
+      if (nextDistance < (distances.get(nextKey) ?? Number.POSITIVE_INFINITY)) {
+        distances.set(nextKey, nextDistance);
+        states.set(nextKey, { zoneId: edge.toZoneId, entryPosition: nextEntryPosition });
+        previous.set(nextKey, { previousKey: currentKey, edge });
       }
     }
   }
 
-  const cost = distances.get(to);
-  if (cost === undefined) {
+  let bestKey: string | null = null;
+  let cost = Number.POSITIVE_INFINITY;
+  for (const [key, distance] of distances) {
+    if (states.get(key)?.zoneId === to && distance < cost) {
+      bestKey = key;
+      cost = distance;
+    }
+  }
+  if (!bestKey || !Number.isFinite(cost)) {
     return { path: null, hops: null, cost: null, edges: [] };
   }
 
   const path = [to];
   const edges: GraphEdge[] = [];
-  let cursor = to;
+  let cursor = bestKey;
   while (previous.has(cursor)) {
-    const edge = previous.get(cursor) as GraphEdge;
+    const { previousKey, edge } = previous.get(cursor) as {
+      previousKey: string;
+      edge: GraphEdge;
+    };
     edges.unshift(edge);
-    cursor = edge.fromZoneId;
-    path.unshift(cursor);
+    cursor = previousKey;
+    path.unshift(states.get(cursor)?.zoneId ?? edge.fromZoneId);
   }
 
   return { path, hops: path.length - 1, cost, edges };
@@ -252,9 +327,15 @@ function afmPositionForNeighbor(zone: Zone, neighbor: Zone): Point | undefined {
   if (!zoneAfm?.id || !neighborAfm?.id) {
     return undefined;
   }
-  return afmEdges(zoneAfm).find(
+  const position = afmEdges(zoneAfm).find(
     (edge) => edge.targetLocationId === neighborAfm.id && isPoint(edge.position)
   )?.position;
+  // AFM positions use math Y-up; negate to match screen-Y expected by directionFromPosition
+  return position ? [position[0], -position[1]] : undefined;
+}
+
+function flipMathY(pos: Point): Point {
+  return [pos[0], -pos[1]];
 }
 
 function edgePositionForZone(
@@ -267,12 +348,15 @@ function edgePositionForZone(
     return undefined;
   }
   if (edge.fromZoneId === zoneId) {
-    return edge.fromPosition ?? (neighbor ? afmPositionForNeighbor(zone, neighbor) : undefined);
+    // fromPosition is set: use it, flipping Y if the edge stores math-Y coordinates
+    if (edge.fromPosition) {
+      return edge.positionsMathY ? flipMathY(edge.fromPosition) : edge.fromPosition;
+    }
+    // Fallback: afmPositionForNeighbor already returns screen-Y (flipped internally)
+    return neighbor ? afmPositionForNeighbor(zone, neighbor) : undefined;
   }
   if (edge.toZoneId === zoneId) {
-    // toPosition is in screen-coords; for enter direction, fall through to travelDirectionBetweenZones
-    // which uses worldmapposition (game-coords) and gives the correct N/S result.
-    return undefined;
+    return edge.toPosition && edge.positionsMathY ? flipMathY(edge.toPosition) : edge.toPosition;
   }
   return undefined;
 }
