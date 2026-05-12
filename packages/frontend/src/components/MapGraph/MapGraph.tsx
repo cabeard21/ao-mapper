@@ -19,14 +19,13 @@ import {
   readableLayoutOptions,
   shouldLayoutAfterRouteVisualEdges,
 } from "./graphLayout";
-import { getPrimaryZoneIcon } from "../zonePresentation";
+import { buildNodeLabel, getPrimaryZoneIcon } from "../zonePresentation";
 
 cytoscape.use(fcose);
 
 const defaultSettings: cytoscape.CytoscapeOptions = {
   minZoom: 0.05,
   maxZoom: 1.75,
-  wheelSensitivity: 0.25,
   zoomingEnabled: true,
   userZoomingEnabled: true,
   panningEnabled: true,
@@ -43,7 +42,7 @@ function centerNodeAtReadableZoom(cy: cytoscape.Core, nodeId: string) {
   }
   cy.animate(
     { center: { eles: node }, zoom: Math.max(cy.zoom(), 1.0) },
-    { duration: 300 }
+    { duration: 300 },
   );
 }
 
@@ -63,7 +62,7 @@ export function MapGraph() {
   const viewportCommand = useMapStore((s) => s.viewportCommand);
   const isConnectionDrawMode = useMapStore((s) => s.isConnectionDrawMode);
   const pendingConnectionFromNodeId = useMapStore(
-    (s) => s.pendingConnectionFromNodeId
+    (s) => s.pendingConnectionFromNodeId,
   );
   const setSelectedNode = useMapStore((s) => s.setSelectedNode);
   const setSavedNodePositions = useMapStore((s) => s.setSavedNodePositions);
@@ -74,17 +73,20 @@ export function MapGraph() {
   const closeNodeContextMenu = useMapStore((s) => s.closeNodeContextMenu);
   const clearViewportCommand = useMapStore((s) => s.clearViewportCommand);
 
-  const persistNodePosition = useCallback((node: cytoscape.NodeSingular) => {
-    if (!isNodePositionPersistable(useMapStore.getState().nodes, node.id())) {
-      return;
-    }
+  const persistNodePosition = useCallback(
+    (node: cytoscape.NodeSingular) => {
+      if (!isNodePositionPersistable(useMapStore.getState().nodes, node.id())) {
+        return;
+      }
 
-    const position = node.position() as SavedNodePosition;
-    upsertSavedNodePosition(node.id(), position);
-    axios.put(`/api/layout/${node.id()}`, position).catch(() => {
-      /* persistence is best-effort */
-    });
-  }, [upsertSavedNodePosition]);
+      const position = node.position() as SavedNodePosition;
+      upsertSavedNodePosition(node.id(), position);
+      axios.put(`/api/layout/${node.id()}`, position).catch(() => {
+        /* persistence is best-effort */
+      });
+    },
+    [upsertSavedNodePosition],
+  );
 
   // Initialize Cytoscape
   useEffect(() => {
@@ -210,7 +212,7 @@ export function MapGraph() {
           group: "nodes",
           data: {
             id: n.id,
-            label: n.label,
+            label: buildNodeLabel(n),
             zoneType: n.zoneType,
             tier: n.tier,
             icon: getPrimaryZoneIcon(n.zone),
@@ -224,7 +226,9 @@ export function MapGraph() {
     });
 
     if (shouldRunLayout) {
-      const layout = cy.layout(layoutOptionsForViewportMode(isFollowingCurrentZone));
+      const layout = cy.layout(
+        layoutOptionsForViewportMode(isFollowingCurrentZone),
+      );
       layout.one("layoutstop", () => {
         cy.nodes().forEach((node) => {
           persistNodePosition(node);
@@ -232,7 +236,13 @@ export function MapGraph() {
       });
       layout.run();
     }
-  }, [isFollowingCurrentZone, nodes, persistNodePosition, routePath, savedNodePositions]);
+  }, [
+    isFollowingCurrentZone,
+    nodes,
+    persistNodePosition,
+    routePath,
+    savedNodePositions,
+  ]);
 
   // Sync portal edges (excludes static edges managed separately below)
   useEffect(() => {
@@ -272,7 +282,10 @@ export function MapGraph() {
         elem.toggleClass("timed", Boolean(e.durationHours));
         elem.toggleClass(
           "time-low",
-          Boolean(e.expiresAt && new Date(e.expiresAt).getTime() - Date.now() < 60 * 60_000)
+          Boolean(
+            e.expiresAt &&
+            new Date(e.expiresAt).getTime() - Date.now() < 60 * 60_000,
+          ),
         );
       }
     });
@@ -297,7 +310,12 @@ export function MapGraph() {
       ) {
         cy.add({
           group: "edges",
-          data: { id: se.id, source: se.source, target: se.target, connType: "STATIC" },
+          data: {
+            id: se.id,
+            source: se.source,
+            target: se.target,
+            connType: "STATIC",
+          },
         });
       }
     }
@@ -364,7 +382,10 @@ export function MapGraph() {
     cy.edges("[isRouteVisual]").remove();
 
     let routeVisualEdgeCount = 0;
-    for (const edge of routePathToVisualEdges(routePath, [...edges, ...staticEdges])) {
+    for (const edge of routePathToVisualEdges(routePath, [
+      ...edges,
+      ...staticEdges,
+    ])) {
       if (cy.$id(edge.source).length > 0 && cy.$id(edge.target).length > 0) {
         cy.add({
           group: "edges",
@@ -395,7 +416,10 @@ export function MapGraph() {
           .filter((edge) => {
             const source = edge.data("source") as string;
             const target = edge.data("target") as string;
-            return (source === from && target === to) || (source === to && target === from);
+            return (
+              (source === from && target === to) ||
+              (source === to && target === from)
+            );
           })
           .addClass("route-edge");
       }

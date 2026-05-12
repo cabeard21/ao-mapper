@@ -6,13 +6,33 @@ import { useMapStore } from "../../store/mapStore";
 export function NodeContextMenu() {
   const queryClient = useQueryClient();
   const nodeContextMenu = useMapStore((s) => s.nodeContextMenu);
+  const nodes = useMapStore((s) => s.nodes);
   const homeZoneId = useMapStore((s) => s.homeZoneId);
+  const fromZone = useMapStore((s) => s.routePlannerFromZone);
+  const toZone = useMapStore((s) => s.routePlannerToZone);
   const setHomeZoneId = useMapStore((s) => s.setHomeZoneId);
+  const setRoutePlannerFromZone = useMapStore((s) => s.setRoutePlannerFromZone);
+  const setRoutePlannerToZone = useMapStore((s) => s.setRoutePlannerToZone);
   const closeNodeContextMenu = useMapStore((s) => s.closeNodeContextMenu);
 
   if (!nodeContextMenu) return null;
 
+  const node = nodes.find((candidate) => candidate.id === nodeContextMenu.nodeId);
+  if (!node) return null;
+
   const isHomeZone = nodeContextMenu.nodeId === homeZoneId;
+  const isFromZone = nodeContextMenu.nodeId === fromZone?.id;
+  const isToZone = nodeContextMenu.nodeId === toZone?.id;
+
+  const handleSetFrom = () => {
+    setRoutePlannerFromZone(node.zone);
+    closeNodeContextMenu();
+  };
+
+  const handleSetTo = () => {
+    setRoutePlannerToZone(node.zone);
+    closeNodeContextMenu();
+  };
 
   const handleSetHome = async () => {
     try {
@@ -48,10 +68,27 @@ export function NodeContextMenu() {
     >
       <button
         type="button"
+        style={isFromZone ? activeItemStyle : itemStyle}
+        onClick={handleSetFrom}
+        disabled={isFromZone}
+      >
+        Set as From
+      </button>
+      <button
+        type="button"
+        style={isToZone ? activeItemStyle : itemStyle}
+        onClick={handleSetTo}
+        disabled={isToZone}
+      >
+        Set as To
+      </button>
+      <div style={separatorStyle} />
+      <button
+        type="button"
         style={isHomeZone ? activeItemStyle : itemStyle}
         onClick={isHomeZone ? handleClearHome : handleSetHome}
       >
-        {isHomeZone ? "⌂ Clear home zone" : "⌂ Set as home zone"}
+        {isHomeZone ? "Clear home zone" : "Set as home zone"}
       </button>
     </div>
   );
@@ -81,7 +118,14 @@ const itemStyle = {
   fontSize: 13,
 } satisfies CSSProperties;
 
+const separatorStyle = {
+  height: 1,
+  margin: "4px 2px",
+  background: "#273247",
+} satisfies CSSProperties;
+
 const activeItemStyle = {
   ...itemStyle,
   color: "#ffd700",
+  cursor: "default",
 } satisfies CSSProperties;

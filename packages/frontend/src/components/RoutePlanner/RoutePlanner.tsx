@@ -11,7 +11,6 @@ import {
   formatRouteDirection,
   findPlannerShortcutZone,
   routeHasDirections,
-  swapPlannerZones,
 } from "./routePresentation";
 
 const directionArrow: Record<RouteDirection, string> = {
@@ -119,15 +118,20 @@ function DirectionChip({
 }
 
 export function RoutePlanner() {
-  const [fromZone, setFromZone] = useState<Zone | null>(null);
-  const [toZone, setToZone] = useState<Zone | null>(null);
-  const [activeRoute, setActiveRoute] = useState<RouteResult | null>(null);
   const nodes = useMapStore((s) => s.nodes);
   const currentZoneId = useMapStore((s) => s.currentZoneId);
   const homeZoneId = useMapStore((s) => s.homeZoneId);
+  const fromZone = useMapStore((s) => s.routePlannerFromZone);
+  const toZone = useMapStore((s) => s.routePlannerToZone);
+  const activeRoute = useMapStore((s) => s.routePlannerActiveRoute);
   const addRouteNodes = useMapStore((s) => s.addRouteNodes);
   const clearRoute = useMapStore((s) => s.clearRoute);
+  const clearRoutePlannerZones = useMapStore((s) => s.clearRoutePlannerZones);
+  const setRoutePlannerActiveRoute = useMapStore((s) => s.setRoutePlannerActiveRoute);
+  const setRoutePlannerFromZone = useMapStore((s) => s.setRoutePlannerFromZone);
+  const setRoutePlannerToZone = useMapStore((s) => s.setRoutePlannerToZone);
   const setRoutePath = useMapStore((s) => s.setRoutePath);
+  const swapRoutePlannerZones = useMapStore((s) => s.swapRoutePlannerZones);
 
   const routeMutation = useMutation({
     mutationFn: async () => {
@@ -146,7 +150,7 @@ export function RoutePlanner() {
       clearRoute();
       setRoutePath(route.path ?? []);
       addRouteNodes(route.steps.map((step) => zoneToNode(step.zone, "route")));
-      setActiveRoute(route);
+      setRoutePlannerActiveRoute(route);
     },
   });
 
@@ -165,12 +169,12 @@ export function RoutePlanner() {
     onSuccess: (route) => {
       const cityZone = route.steps.at(-1)?.zone ?? null;
       const firstZone = route.steps.at(0)?.zone ?? null;
-      if (cityZone) setToZone(cityZone);
-      if (!fromZone && firstZone) setFromZone(firstZone);
+      if (cityZone) setRoutePlannerToZone(cityZone);
+      if (!fromZone && firstZone) setRoutePlannerFromZone(firstZone);
       clearRoute();
       setRoutePath(route.path ?? []);
       addRouteNodes(route.steps.map((step) => zoneToNode(step.zone, "route")));
-      setActiveRoute(route);
+      setRoutePlannerActiveRoute(route);
     },
   });
 
@@ -198,36 +202,37 @@ export function RoutePlanner() {
     onSuccess: (route) => {
       const redZone = route.steps.at(-1)?.zone ?? null;
       const firstZone = route.steps.at(0)?.zone ?? null;
-      if (redZone) setToZone(redZone);
-      if (!fromZone && firstZone) setFromZone(firstZone);
+      if (redZone) setRoutePlannerToZone(redZone);
+      if (!fromZone && firstZone) setRoutePlannerFromZone(firstZone);
       clearRoute();
       setRoutePath(route.path ?? []);
       addRouteNodes(route.steps.map((step) => zoneToNode(step.zone, "route")));
-      setActiveRoute(route);
+      setRoutePlannerActiveRoute(route);
     },
   });
 
+  useEffect(() => {
+    routeMutation.reset();
+    nearestCityMutation.reset();
+    nearestRedMutation.reset();
+  }, [fromZone?.id, toZone?.id]);
+
   const setPlannerFromZone = (zone: Zone) => {
-    setFromZone(zone);
-    setActiveRoute(null);
+    setRoutePlannerFromZone(zone);
     routeMutation.reset();
     nearestCityMutation.reset();
     nearestRedMutation.reset();
   };
 
   const setPlannerToZone = (zone: Zone) => {
-    setToZone(zone);
-    setActiveRoute(null);
+    setRoutePlannerToZone(zone);
     routeMutation.reset();
     nearestCityMutation.reset();
     nearestRedMutation.reset();
   };
 
   const handleSwapZones = () => {
-    const swapped = swapPlannerZones(fromZone, toZone);
-    setFromZone(swapped.fromZone);
-    setToZone(swapped.toZone);
-    setActiveRoute(null);
+    swapRoutePlannerZones();
     routeMutation.reset();
     nearestCityMutation.reset();
     nearestRedMutation.reset();
@@ -382,9 +387,7 @@ export function RoutePlanner() {
           <button
             type="button"
             onClick={() => {
-              setFromZone(null);
-              setToZone(null);
-              setActiveRoute(null);
+              clearRoutePlannerZones();
               clearRoute();
               routeMutation.reset();
               nearestCityMutation.reset();

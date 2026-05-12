@@ -3,6 +3,7 @@ import type {
   Connection,
   ConnectionType,
   OcrResult,
+  RouteResult,
   Zone,
   ZoneType,
 } from "@ao-mapper/shared";
@@ -65,6 +66,9 @@ interface MapState {
   selectedNodeId: string | null;
   currentZoneId: string | null;
   homeZoneId: string | null;
+  routePlannerFromZone: Zone | null;
+  routePlannerToZone: Zone | null;
+  routePlannerActiveRoute: RouteResult | null;
   isFollowingCurrentZone: boolean;
   routePath: string[];
   isConnectionDrawMode: boolean;
@@ -91,6 +95,11 @@ interface MapState {
   setSelectedNode: (id: string | null) => void;
   setCurrentZone: (id: string | null) => void;
   setHomeZoneId: (id: string | null) => void;
+  setRoutePlannerFromZone: (zone: Zone | null) => void;
+  setRoutePlannerToZone: (zone: Zone | null) => void;
+  setRoutePlannerActiveRoute: (route: RouteResult | null) => void;
+  swapRoutePlannerZones: () => void;
+  clearRoutePlannerZones: () => void;
   setFollowingCurrentZone: (enabled: boolean) => void;
   setRoutePath: (path: string[]) => void;
   clearRoute: () => void;
@@ -171,6 +180,9 @@ export const useMapStore = create<MapState>((set, get) => ({
   selectedNodeId: null,
   currentZoneId: null,
   homeZoneId: null,
+  routePlannerFromZone: null,
+  routePlannerToZone: null,
+  routePlannerActiveRoute: null,
   isFollowingCurrentZone: false,
   routePath: [],
   isConnectionDrawMode: false,
@@ -353,6 +365,23 @@ export const useMapStore = create<MapState>((set, get) => ({
   setSelectedNode: (id) => set({ selectedNodeId: id }),
   setCurrentZone: (id) => set({ currentZoneId: id }),
   setHomeZoneId: (id) => set({ homeZoneId: id }),
+  setRoutePlannerFromZone: (zone) =>
+    set({ routePlannerFromZone: zone, routePlannerActiveRoute: null }),
+  setRoutePlannerToZone: (zone) =>
+    set({ routePlannerToZone: zone, routePlannerActiveRoute: null }),
+  setRoutePlannerActiveRoute: (route) => set({ routePlannerActiveRoute: route }),
+  swapRoutePlannerZones: () =>
+    set((s) => ({
+      routePlannerFromZone: s.routePlannerToZone,
+      routePlannerToZone: s.routePlannerFromZone,
+      routePlannerActiveRoute: null,
+    })),
+  clearRoutePlannerZones: () =>
+    set({
+      routePlannerFromZone: null,
+      routePlannerToZone: null,
+      routePlannerActiveRoute: null,
+    }),
   setFollowingCurrentZone: (enabled) => set({ isFollowingCurrentZone: enabled }),
   setRoutePath: (path) => set({ routePath: path }),
   clearRoute: () =>

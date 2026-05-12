@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Zone } from "@ao-mapper/shared";
+import type { RouteResult, Zone } from "@ao-mapper/shared";
 import { isNodePositionPersistable, routePathToVisualEdges, useMapStore } from "./mapStore";
 import { zoneToNode } from "../components/zonePresentation";
 
@@ -24,6 +24,9 @@ describe("mapStore zone management", () => {
       selectedNodeId: null,
       currentZoneId: null,
       homeZoneId: null,
+      routePlannerFromZone: null,
+      routePlannerToZone: null,
+      routePlannerActiveRoute: null,
       routePath: [],
       isFollowingCurrentZone: false,
     });
@@ -48,6 +51,58 @@ describe("mapStore zone management", () => {
     useMapStore.getState().setFollowingCurrentZone(false);
 
     expect(useMapStore.getState().isFollowingCurrentZone).toBe(false);
+  });
+
+  it("stores route planner From and To zones while clearing stale route results", () => {
+    const fromZone = makeZone("zone-from", "From Zone");
+    const toZone = makeZone("zone-to", "To Zone");
+    const activeRoute: RouteResult = {
+      path: ["old-from", "old-to"],
+      hops: 1,
+      cost: 1,
+      steps: [],
+    };
+
+    useMapStore.setState({ routePlannerActiveRoute: activeRoute });
+
+    useMapStore.getState().setRoutePlannerFromZone(fromZone);
+    expect(useMapStore.getState().routePlannerFromZone).toEqual(fromZone);
+    expect(useMapStore.getState().routePlannerActiveRoute).toBeNull();
+
+    useMapStore.setState({ routePlannerActiveRoute: activeRoute });
+    useMapStore.getState().setRoutePlannerToZone(toZone);
+
+    expect(useMapStore.getState().routePlannerToZone).toEqual(toZone);
+    expect(useMapStore.getState().routePlannerActiveRoute).toBeNull();
+  });
+
+  it("swaps and clears route planner zones immutably", () => {
+    const fromZone = makeZone("zone-from", "From Zone");
+    const toZone = makeZone("zone-to", "To Zone");
+    const activeRoute: RouteResult = {
+      path: ["zone-from", "zone-to"],
+      hops: 1,
+      cost: 1,
+      steps: [],
+    };
+
+    useMapStore.setState({
+      routePlannerFromZone: fromZone,
+      routePlannerToZone: toZone,
+      routePlannerActiveRoute: activeRoute,
+    });
+
+    useMapStore.getState().swapRoutePlannerZones();
+
+    expect(useMapStore.getState().routePlannerFromZone).toEqual(toZone);
+    expect(useMapStore.getState().routePlannerToZone).toEqual(fromZone);
+    expect(useMapStore.getState().routePlannerActiveRoute).toBeNull();
+
+    useMapStore.getState().clearRoutePlannerZones();
+
+    expect(useMapStore.getState().routePlannerFromZone).toBeNull();
+    expect(useMapStore.getState().routePlannerToZone).toBeNull();
+    expect(useMapStore.getState().routePlannerActiveRoute).toBeNull();
   });
 
   it("removes a zone with connected edges and stale route references", () => {
