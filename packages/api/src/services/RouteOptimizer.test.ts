@@ -467,7 +467,7 @@ describe("RouteOptimizer", () => {
     await optimizer.invalidateRoutes();
 
     expect(findActiveConnections).toHaveBeenCalledTimes(1);
-    expect(cache.set).toHaveBeenCalledWith("route:v7:a:b", {
+    expect(cache.set).toHaveBeenCalledWith("route:v8:a:b", {
       path: ["a", "b"],
       hops: 1,
       cost: 1,
