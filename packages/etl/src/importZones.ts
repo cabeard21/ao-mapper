@@ -8,6 +8,7 @@ const DEFAULT_WORLD_JSON_PATH = path.join(REPO_ROOT, 'refs/ao-bin-dumps/formatte
 const DEFAULT_MAPS_JSON_PATH = path.join(REPO_ROOT, 'refs/avalon-roads/src/data/maps.json')
 const DEFAULT_CLUSTER_DIR = path.join(REPO_ROOT, 'refs/ao-bin-dumps/cluster')
 const DEFAULT_AFM_LOCATIONS_URL = 'https://cdn.albionfreemarket.com/AlbionWorld/albionLocations.json'
+const DEFAULT_ALBION_ROADS_URL = 'https://albionroads.com/assets/js/secure-data.js'
 
 const BATCH_SIZE = 100
 const KNOWN_CITY_NAMES = [
@@ -45,6 +46,18 @@ interface MapsJson {
   maps: MapEntry[]
 }
 
+interface AlbionRoadsIcon {
+  alt: string
+  badge?: number
+}
+
+interface AlbionRoadsMap {
+  name: string
+  tier: number
+  icons: AlbionRoadsIcon[]
+  img: string
+}
+
 interface ZoneRecord {
   uniqueName: string
   displayName: string
@@ -65,6 +78,7 @@ interface ImportZonePaths {
   mapsJsonPath: string
   clusterDir: string
   afmLocationsUrl?: string
+  albionRoadsUrl?: string
 }
 
 type Point = [number, number]
@@ -178,12 +192,74 @@ function normalizeName(name: string): string {
     .trim()
 }
 
+const CHEST_ALTS = new Set(['GREEN', 'BLUE', 'GOLD'])
+const DUNGEON_ALTS = new Set(['DUNGEON'])
+const RESOURCE_ALT_MAP: Record<string, string> = {
+  ROCK: 'STONE',
+  LOGS: 'WOOD',
+  ORE: 'ORE',
+  HIRE: 'HIDE',
+  HIDE: 'HIDE',
+  COTTON: 'FIBER',
+}
+
+async function fetchAlbionRoadsData(url: string): Promise<AlbionRoadsMap[]> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) {
+      console.warn(`albionroads.com fetch failed: ${res.status}`)
+      return []
+    }
+    const src = await res.text()
+    const match = src.match(/const encodedData = "([^"]+)"/)
+    if (!match) {
+      console.warn('albionroads.com: encodedData not found in response')
+      return []
+    }
+    const raw = Buffer.from(match[1], 'base64')
+    let decoded = ''
+    for (let i = 0; i < raw.length; i++) decoded += String.fromCharCode(raw[i] ^ 7)
+    return JSON.parse(decoded) as AlbionRoadsMap[]
+  } catch (e) {
+    console.warn(`albionroads.com fetch error: ${e instanceof Error ? e.message : e}`)
+    return []
+  }
+}
+
+function convertAlbionRoadsMap(m: AlbionRoadsMap): MapEntry {
+  const chests: MapResource[] = []
+  const dungeons: MapResource[] = []
+  const resources: MapResource[] = []
+  for (const icon of m.icons) {
+    const count = icon.badge ?? 1
+    if (CHEST_ALTS.has(icon.alt)) {
+      chests.push({ type: icon.alt, size: 'small', count })
+    } else if (DUNGEON_ALTS.has(icon.alt)) {
+      dungeons.push({ type: 'DUNGEON_SOLO', size: 'small', count })
+    } else if (RESOURCE_ALT_MAP[icon.alt]) {
+      resources.push({ type: RESOURCE_ALT_MAP[icon.alt], size: 'small', count })
+    }
+  }
+  return { id: 0, name: m.name, tier: m.tier, image: m.img, chests, dungeons, resources }
+}
+
 function buildMapsIndex(maps: MapEntry[]): Map<string, MapEntry> {
   const index = new Map<string, MapEntry>()
   for (const entry of maps) {
     index.set(normalizeName(entry.name), entry)
   }
   return index
+}
+
+function mergeMapsIndex(
+  primary: Map<string, MapEntry>,
+  fallback: Map<string, MapEntry>
+): Map<string, MapEntry> {
+  const merged = new Map(fallback)
+  for (const [key, entry] of primary) {
+    merged.set(key, entry)
+  }
+  return merged
 }
 
 function isPoint(value: unknown): value is Point {
@@ -586,7 +662,17 @@ export async function importZones(
 ): Promise<number> {
   const world = readJsonFile<WorldEntry[]>(paths.worldJsonPath)
   const mapsJson = readJsonFile<MapsJson>(paths.mapsJsonPath)
-  const mapsIndex = buildMapsIndex(mapsJson.maps)
+  const refsIndex = buildMapsIndex(mapsJson.maps)
+
+  const albionRoadsUrl =
+    paths.albionRoadsUrl ?? process.env.ALBION_ROADS_URL ?? DEFAULT_ALBION_ROADS_URL
+  const albionRoadsMaps = await fetchAlbionRoadsData(albionRoadsUrl)
+  console.log(`albionroads.com: fetched ${albionRoadsMaps.length} maps`)
+  const albionRoadsIndex = buildMapsIndex(albionRoadsMaps.map(convertAlbionRoadsMap))
+
+  // albionroads.com data takes priority for chest counts; refs fills in anything missing
+  const mapsIndex = mergeMapsIndex(albionRoadsIndex, refsIndex)
+
   const clusterIndex = buildClusterIndex(paths.clusterDir)
 
   const filtered = world.filter((entry) => !shouldSkipEntry(entry.Index))
@@ -612,6 +698,15 @@ export async function importZones(
         afm: buildAfmMetadata(afmLocation),
       }
       record.cityDistance = cityDistancesByZoneName.get(record.displayName) ?? []
+
+      // Recover tier and zone type from AFM data when maps.json had no match
+      if (record.tier === 0 && afmLocation.imageFile) {
+        const tierMatch = afmLocation.imageFile.match(/_T(\d+)_/i)
+        if (tierMatch) record.tier = parseInt(tierMatch[1], 10)
+      }
+      if (record.zoneType === 'unknown' && afmLocation.mapCategory === 'roads') {
+        record.zoneType = 'roads'
+      }
     }
   }
 
